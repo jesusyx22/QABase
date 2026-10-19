@@ -1,0 +1,28 @@
+{
+  "name": "@qabase/api",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/server.js",
+    "db:migrate": "tsx src/db/migrate-cli.ts",
+    "setup": "tsx src/cli/setup.ts",
+    "reset-admin-password": "tsx src/cli/reset-admin-password.ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.1.3",
+    "@fastify/static": "^10.1.6",
+    "@inquirer/prompts": "^8.7.3",
+    "@node-rs/argon2": "^2.2.2",
+    "@qabase/shared": "*",
+    "fastify": "^5.0.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "~6.0.2"
+  }
+}

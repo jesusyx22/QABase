@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+data/
+backups/
+.env
+.env.*
+!.env.example
+*.local
+.DS_Store
+scripts/helpdesk-agent/helpdesk.env
+scripts/helpdesk-agent/*.local
+__pycache__/
+*.pyc
