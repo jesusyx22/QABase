@@ -1,12 +1,12 @@
 import { Suspense, useState, type ReactNode } from 'react'
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/features/auth/useAuth'
 import { visibleModules } from '@/features/modules/registry'
 
 function navLinkClass({ isActive }: { isActive: boolean }): string {
   return [
-    'block rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-foreground',
+    'block rounded-md px-3 py-2 text-sm transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-foreground',
     isActive
       ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
       : 'text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground',
@@ -140,6 +140,7 @@ function SidebarContent({
 
 export function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const location = useLocation()
 
   return (
     <div className="min-h-dvh bg-background text-foreground lg:flex">
@@ -177,7 +178,7 @@ export function AppLayout() {
         {mobileOpen ? (
           <div
             id="mobile-nav"
-            className="border-b border-sidebar-border bg-sidebar text-sidebar-foreground lg:hidden"
+            className="animate-in fade-in slide-in-from-top-1 duration-150 border-b border-sidebar-border bg-sidebar text-sidebar-foreground lg:hidden"
           >
             <SidebarContent
               showBrand={false}
@@ -197,7 +198,9 @@ export function AppLayout() {
               </p>
             }
           >
-            <Outlet />
+            <div key={location.pathname} className="page-enter">
+              <Outlet />
+            </div>
           </Suspense>
         </main>
       </div>

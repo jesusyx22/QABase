@@ -295,7 +295,10 @@ export function PersonalPage() {
                     </TableCell>
                     <TableCell>
                       <Badge
-                        variant={person.isActive ? 'secondary' : 'outline'}
+                        variant={person.isActive ? 'success' : 'outline'}
+                        className={
+                          person.isActive ? undefined : 'text-muted-foreground'
+                        }
                       >
                         {person.isActive ? 'Activo' : 'Inactivo'}
                       </Badge>

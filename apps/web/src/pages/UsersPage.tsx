@@ -265,7 +265,7 @@ export function UsersPage() {
                       </TableCell>
                       <TableCell>
                         <Badge
-                          variant={user.isActive ? 'secondary' : 'outline'}
+                          variant={user.isActive ? 'success' : 'outline'}
                           className={
                             user.isActive ? undefined : 'text-muted-foreground'
                           }

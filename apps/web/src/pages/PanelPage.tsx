@@ -70,7 +70,7 @@ export function PanelPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           {modules.map((module) => (
             <Link key={module.id} to={`/${module.path}`} className="group">
-              <Card className="h-full border-l-4 border-l-sidebar transition-colors group-hover:border-l-primary">
+              <Card className="h-full border-l-4 border-l-sidebar transition-[border-color,box-shadow,transform] duration-150 group-hover:border-l-primary group-hover:shadow-md group-hover:-translate-y-0.5">
                 <CardHeader>
                   <CardTitle>{module.label}</CardTitle>
                   <CardDescription>{module.description}</CardDescription>

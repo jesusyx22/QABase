@@ -5,6 +5,7 @@
  * No accede a datos ni ejecuta lógica de negocio (BE-56).
  */
 
+export * from './access-assignments'
 export * from './permissions'
 export * from './session'
 export * from './validation'

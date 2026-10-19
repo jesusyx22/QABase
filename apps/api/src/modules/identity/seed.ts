@@ -31,13 +31,14 @@ const SEED_ROLES: SeedRole[] = [
       'registros.editar',
       'mesa.ver',
       'mesa.crear',
+      'accesos.ver',
     ],
   },
   {
     seedKey: 'consulta',
     name: 'Consulta',
     isProtected: false,
-    permissions: ['registros.ver', 'mesa.ver'],
+    permissions: ['registros.ver', 'mesa.ver', 'accesos.ver'],
   },
 ]
 

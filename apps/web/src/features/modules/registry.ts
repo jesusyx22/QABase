@@ -52,6 +52,19 @@ export const MODULES: ModuleDefinition[] = [
     ),
   },
   {
+    id: 'accesses',
+    path: 'accesos',
+    label: 'Accesos',
+    group: 'principal',
+    description: 'Catálogo de accesos de firewall y puertos.',
+    permission: 'accesos.ver',
+    component: lazy(() =>
+      import('@/pages/AccessesPage').then((module) => ({
+        default: module.AccessesPage,
+      })),
+    ),
+  },
+  {
     id: 'users',
     path: 'usuarios',
     label: 'Usuarios',

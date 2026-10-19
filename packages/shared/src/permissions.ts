@@ -55,6 +55,17 @@ export const PERMISSIONS = [
     label: 'Crear tickets de Mesa de Ayuda',
     description: 'Reportar un ticket rápido.',
   },
+  {
+    key: 'accesos.ver',
+    label: 'Ver accesos',
+    description: 'Consultar el catálogo de accesos de firewall.',
+  },
+  {
+    key: 'accesos.gestionar',
+    label: 'Gestionar accesos',
+    description:
+      'Crear, editar, activar, desactivar y consultar el historial de accesos.',
+  },
 ] as const
 
 export type PermissionKey = (typeof PERMISSIONS)[number]['key']

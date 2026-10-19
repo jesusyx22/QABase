@@ -286,4 +286,77 @@ describe('rutas de módulos', () => {
     })
     expect(creation.statusCode).toBe(404)
   })
+
+  it('protege la edición de accesos y permite consulta a Editor', async () => {
+    const { app, db, admin, now } = await createHarness()
+    const adminSession = await login(app)
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/accesses',
+      headers: authHeaders(adminSession),
+      payload: {
+        address: '10.20.10.15',
+        port: 443,
+        environment: 'production',
+        protocol: 'tcp',
+        detail: 'API de pagos',
+      },
+    })
+    expect(created.statusCode).toBe(201)
+    const accessId = created.json().id as number
+
+    const adminHistory = await app.inject({
+      method: 'GET',
+      url: `/api/accesses/${accessId}/history`,
+      headers: authHeaders(adminSession),
+    })
+    expect(adminHistory.statusCode).toBe(200)
+    expect(adminHistory.json()).toHaveLength(1)
+
+    const editorRole = findRoleBySeedKey(db, 'editor')!
+    const editor = await createUser(
+      { db, hasher },
+      {
+        id: admin.id,
+        username: admin.username,
+        permissions: [...PERMISSION_KEYS],
+      },
+      {
+        username: 'editor',
+        password: PASSWORD,
+        roleId: editorRole.id,
+        now,
+      },
+    )
+    expect(editor.username).toBe('editor')
+    const editorSession = await login(app, 'editor')
+
+    const list = await app.inject({
+      method: 'GET',
+      url: '/api/accesses',
+      headers: authHeaders(editorSession),
+    })
+    expect(list.statusCode).toBe(200)
+    expect(list.json()).toHaveLength(1)
+
+    const write = await app.inject({
+      method: 'POST',
+      url: '/api/accesses',
+      headers: authHeaders(editorSession),
+      payload: {
+        address: '10.20.10.16',
+        port: 443,
+        environment: 'production',
+      },
+    })
+    expect(write.statusCode).toBe(403)
+
+    const history = await app.inject({
+      method: 'GET',
+      url: `/api/accesses/${accessId}/history`,
+      headers: authHeaders(editorSession),
+    })
+    expect(history.statusCode).toBe(403)
+  })
 })

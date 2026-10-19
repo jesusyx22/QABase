@@ -19,6 +19,7 @@
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "db:migrate": "npm run db:migrate -w @qabase/api",
+    "import:firewall": "tsx scripts/import-firewall-destinations.ts",
     "verify": "npm run typecheck && npm run lint && npm test && npm run build",
     "setup": "npm run setup -w @qabase/api",
     "reset-admin-password": "npm run reset-admin-password -w @qabase/api"

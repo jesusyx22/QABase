@@ -10,6 +10,8 @@ import { HttpError } from './core/errors'
 import type { PasswordHasher } from './core/security/password'
 import type { LoginThrottle } from './core/security/throttle'
 import { registerAccountRoutes } from './routes/account'
+import { registerAccessAssignmentRoutes } from './routes/access-assignments'
+import { registerAccessRoutes } from './routes/accesses'
 import { registerHelpdeskRoutes } from './routes/helpdesk'
 import { registerPersonalRoutes } from './routes/personal'
 import { registerRecordRoutes } from './routes/records'
@@ -126,6 +128,16 @@ export async function buildServer(options: ServerOptions): Promise<FastifyInstan
     db: options.db,
     clock: options.clock,
     syncToken: options.syncToken,
+  })
+
+  registerAccessRoutes(app, {
+    db: options.db,
+    clock: options.clock,
+  })
+
+  registerAccessAssignmentRoutes(app, {
+    db: options.db,
+    clock: options.clock,
   })
 
   if (hasWebBuild) {

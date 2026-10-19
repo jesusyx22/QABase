@@ -69,7 +69,7 @@ describe('seeds de identidad', () => {
   it('crean 10 permisos, 3 roles y las concesiones iniciales', () => {
     const db = createTestDatabase()
 
-    expect(count(db, 'permissions')).toBe(10)
+    expect(count(db, 'permissions')).toBe(12)
     expect(count(db, 'roles')).toBe(3)
 
     const admin = findProtectedRole(db)!
@@ -82,7 +82,7 @@ describe('seeds de identidad', () => {
         name: admin.name,
         isProtected: true,
       }),
-    ).toHaveLength(10)
+    ).toHaveLength(12)
     expect(
       resolvePermissions(db, {
         id: editor.id,
@@ -95,6 +95,7 @@ describe('seeds de identidad', () => {
       'registros.editar',
       'mesa.ver',
       'mesa.crear',
+      'accesos.ver',
     ])
     expect(
       resolvePermissions(db, {
@@ -102,8 +103,8 @@ describe('seeds de identidad', () => {
         name: consulta.name,
         isProtected: false,
       }),
-    ).toEqual(['registros.ver', 'mesa.ver'])
-    expect(count(db, 'role_permissions')).toBe(7)
+    ).toEqual(['registros.ver', 'mesa.ver', 'accesos.ver'])
+    expect(count(db, 'role_permissions')).toBe(9)
 
     db.close()
   })
@@ -152,7 +153,7 @@ describe('seeds de identidad', () => {
         name: consulta.name,
         isProtected: false,
       }),
-    ).toEqual(['registros.ver', 'mesa.ver'])
+    ).toEqual(['registros.ver', 'mesa.ver', 'accesos.ver'])
 
     db.close()
   })
