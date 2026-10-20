@@ -43,6 +43,7 @@ Panel local del equipo de QA para mantener el catálogo de Personal QA, registra
 - Dinero en centavos; fecha del hecho `AAAA-MM-DD`; momentos en ISO-8601 UTC.
 - Sin borrado físico: se desactiva, se anula o se conserva.
 - Nunca exponer secretos, credenciales ni sesiones en respuestas, logs o auditoría.
+- Desde el agente, no ejecutar SQL de escritura directo (`UPDATE`, `INSERT`, `DELETE`, `MERGE`, DDL) sobre bases locales o remotas sin que la tarea lo requiera y exista autorización explícita en ese momento. Las migraciones solo se ejecutan cuando se piden.
 - La escritura de negocio y su evento de auditoría comparten transacción.
 - Una decisión nueva no obvia → `docs/adr/`.
 - Los módulos funcionales nuevos van al grupo `principal` del sidebar; `configuracion` se reserva para administración general (Personal QA, Usuarios, Roles).
