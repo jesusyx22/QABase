@@ -1,6 +1,5 @@
 const http = require('http');
 const net = require('net');
-const os = require('os');
 
 // ==========================================
 // CONFIGURACIÓN DEL PROXY REVERSO
@@ -13,22 +12,7 @@ const TARGET_PORT = parseInt(process.env.TARGET_PORT || '80', 10);
 const DEFAULT_PORTS = [8081, 80];
 const cliPorts = process.argv.slice(2).map(p => parseInt(p, 10)).filter(p => !isNaN(p));
 const PORTS = cliPorts.length > 0 ? cliPorts : DEFAULT_PORTS;
-
-/**
- * Obtiene todas las IPs IPv4 activas de la máquina para mostrarlas al usuario
- */
-function getLocalIPs() {
-    const interfaces = os.networkInterfaces();
-    const ips = [];
-    for (const [name, addrs] of Object.entries(interfaces)) {
-        for (const iface of addrs) {
-            if (iface.family === 'IPv4' && !iface.internal) {
-                ips.push({ name, ip: iface.address });
-            }
-        }
-    }
-    return ips;
-}
+const BIND_HOST = process.env.BIND_HOST || '0.0.0.0';
 
 /**
  * Manejador de peticiones HTTP estándar
@@ -144,7 +128,6 @@ function upgradeHandler(req, socket, head) {
 // ==========================================
 // INICIALIZACIÓN DE SERVIDORES
 // ==========================================
-const localIps = getLocalIPs();
 const activeServers = [];
 
 console.log('='.repeat(65));
@@ -155,13 +138,9 @@ for (const port of PORTS) {
     const server = http.createServer(requestHandler);
     server.on('upgrade', upgradeHandler);
 
-    server.listen(port, '0.0.0.0', () => {
-        console.log(`\n[OK] Escuchando en el puerto ${port}:`);
-        for (const { name, ip } of localIps) {
-            const portStr = port === 80 ? '' : `:${port}`;
-            console.log(`   -> http://${ip}${portStr}/  (${name})`);
-        }
-        console.log(`   -> http://localhost${port === 80 ? '' : `:${port}`}/  (Local)`);
+    server.listen(port, BIND_HOST, () => {
+        const portStr = port === 80 ? '' : `:${port}`;
+        console.log(`[OK] Escuchando en http://${BIND_HOST}${portStr}/`);
         activeServers.push(server);
     });
 

@@ -766,7 +766,7 @@ describe('ProxiesPage', () => {
 
     const dialog = await screen.findByRole('dialog')
     expect(
-      within(dialog).getByText(/esta acción modificará el host publicado de 5 servicios/i),
+      within(dialog).getByText(/esta acción cambia la IP de escucha de 5 servicios/i),
     ).toBeInTheDocument()
 
     const input = within(dialog).getByLabelText(/dirección ipv4/i)

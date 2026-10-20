@@ -91,7 +91,7 @@ export function GlobalHostCard({
       setError(
         errorMessage(
           caught,
-          'No se pudo actualizar la IP global del puente.',
+          'No se pudo actualizar la IP global de los proxies.',
         ),
       )
     } finally {
@@ -105,10 +105,10 @@ export function GlobalHostCard({
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
             <Server className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-            <CardTitle>IP global del puente</CardTitle>
+            <CardTitle>IP de enlace de los proxies</CardTitle>
           </div>
           <CardDescription>
-            Dirección IPv4 del host donde corren los proxies.
+            IPv4 en la que escuchan todos los servicios de proxy.
           </CardDescription>
           {canManage ? (
             <CardAction>
@@ -170,10 +170,10 @@ export function GlobalHostCard({
           ) : (
             <div className="space-y-1">
               <p className="text-sm font-medium text-warning">
-                No se ha configurado la IP global del puente.
+                No se ha configurado la IP de enlace de los proxies.
               </p>
               <p className="text-xs text-muted-foreground">
-                Debes definir una dirección IPv4 para poder publicar endpoints.
+                Define la IPv4 local donde deben escuchar los servicios.
               </p>
             </div>
           )}
@@ -187,20 +187,21 @@ export function GlobalHostCard({
         >
           <DialogHeader>
             <DialogTitle>
-              {isConfigured ? 'Cambiar IP global' : 'Configurar IP global'}
+              {isConfigured ? 'Cambiar IP de enlace' : 'Configurar IP de enlace'}
             </DialogTitle>
             <DialogDescription>
               {isConfigured
-                ? 'Actualiza la dirección IPv4 del host puente.'
-                : 'Define la dirección IPv4 donde corren los proxies.'}
+                ? 'Actualiza la IPv4 de escucha. Reinicia los servicios para aplicar el cambio.'
+                : 'Define la IPv4 local donde escucharán los servicios.'}
             </DialogDescription>
           </DialogHeader>
 
           {isConfigured && totalServices > 0 ? (
             <Alert className="border-warning/50 bg-warning/5 text-foreground">
               <AlertDescription className="text-xs">
-                Esta acción modificará el host publicado de {totalServices}{' '}
-                {totalServices === 1 ? 'servicio' : 'servicios'}.
+                Esta acción cambia la IP de escucha de {totalServices}{' '}
+                {totalServices === 1 ? 'servicio' : 'servicios'}. Reinícialos
+                para aplicar el cambio.
               </AlertDescription>
             </Alert>
           ) : null}
@@ -224,7 +225,7 @@ export function GlobalHostCard({
                 autoFocus
               />
               <p className="text-xs text-muted-foreground">
-                Debe ser una dirección IPv4 válida (ej. 10.4.24.18).
+                Debe ser una IPv4 local asignada a este equipo (ej. 10.4.24.18).
               </p>
             </div>
 

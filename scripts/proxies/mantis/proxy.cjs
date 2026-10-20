@@ -4,6 +4,7 @@ const TARGET_HOST = '10.20.22.50';
 const TARGET_PORT = 80;
 const cliPorts = process.argv.slice(2).map(p => parseInt(p, 10)).filter(p => !isNaN(p));
 const PORTS = cliPorts.length > 0 ? cliPorts : [80, 8080];
+const BIND_HOST = process.env.BIND_HOST || '0.0.0.0';
 
 function requestHandler(clientReq, clientRes) {
     const clientIp = clientReq.socket.remoteAddress || 'unknown';
@@ -84,8 +85,8 @@ function requestHandler(clientReq, clientRes) {
 // Start listeners
 for (const port of PORTS) {
     const server = http.createServer(requestHandler);
-    server.listen(port, '0.0.0.0', () => {
-        console.log(`> Reverse Proxy activo escuchando en 0.0.0.0:${port}`);
+    server.listen(port, BIND_HOST, () => {
+        console.log(`> Reverse Proxy activo escuchando en ${BIND_HOST}:${port}`);
     });
     server.on('error', (err) => {
         console.warn(`[Aviso] No se pudo escuchar en el puerto ${port}: ${err.message}`);

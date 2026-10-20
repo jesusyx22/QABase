@@ -18,6 +18,7 @@ import {
   createSystemProcessInspector,
   defaultHealthCheck,
   type ProcessInspector,
+  type ProxyHealthCheck,
 } from './modules/proxies/process'
 import {
   createSystemProcessController,
@@ -45,7 +46,7 @@ export type ServerOptions = {
   proxyLogsPath?: string
   proxyInspector?: ProcessInspector
   proxyController?: ProxyProcessController
-  proxyHealthCheck?: (port: number, path: string) => Promise<boolean>
+  proxyHealthCheck?: ProxyHealthCheck
 }
 
 function errorBody(code: ApiError['error']['code'], message: string): ApiError {

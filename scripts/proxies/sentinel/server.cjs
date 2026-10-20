@@ -1,6 +1,5 @@
 const http = require('http')
 const https = require('https')
-const os = require('os')
 const { readFileSync } = require('fs')
 const { join } = require('path')
 
@@ -8,6 +7,7 @@ const manifest = JSON.parse(
   readFileSync(join(__dirname, 'service.json'), 'utf8'),
 )
 const PORT = Number(process.env.PORT || manifest.primaryPort || 3500)
+const BIND_HOST = process.env.BIND_HOST || '0.0.0.0'
 
 function writeJson(res, status, body) {
   res.writeHead(status, {
@@ -126,16 +126,8 @@ const server = http.createServer(function (req, res) {
   req.pipe(proxyReq)
 })
 
-server.listen(PORT, '0.0.0.0', function () {
-  console.log('Proxy Sentinel escuchando en 0.0.0.0:' + PORT)
-  const interfaces = os.networkInterfaces()
-  Object.keys(interfaces).forEach(function (name) {
-    interfaces[name].forEach(function (iface) {
-      if (iface.family === 'IPv4' && !iface.internal) {
-        console.log('- http://' + iface.address + ':' + PORT)
-      }
-    })
-  })
+server.listen(PORT, BIND_HOST, function () {
+  console.log('Proxy Sentinel escuchando en ' + BIND_HOST + ':' + PORT)
 })
 
 server.on('error', function (error) {

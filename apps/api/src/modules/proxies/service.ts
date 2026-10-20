@@ -33,6 +33,7 @@ import {
   inspectService,
   type PortListener,
   type ProcessInspector,
+  type ProxyHealthCheck,
 } from './process'
 import {
   createSystemProcessController,
@@ -128,7 +129,7 @@ function mapRoute(
 
 export type ListProxiesOptions = {
   inspector?: ProcessInspector
-  healthCheck?: (port: number, path: string) => Promise<boolean>
+  healthCheck?: ProxyHealthCheck
   now?: Date
 }
 
@@ -146,6 +147,7 @@ export async function listProxies(
   const inspector = options.inspector ?? createSystemProcessInspector()
   const healthCheck = options.healthCheck ?? defaultHealthCheck
   const now = options.now ?? new Date()
+  const bindHost = settings.host ?? '0.0.0.0'
   const allPorts = [...new Set(ports.map((row) => row.port))]
   const listeners = await inspector.listListeners(allPorts)
   const listening = new Set(listeners.map((listener) => listener.port))
@@ -173,8 +175,9 @@ export async function listProxies(
       listeners,
       alive: alive.get(service.id) ?? false,
       now,
+      bindHost,
       healthCheck,
-      canBindPort: (port) => inspector.canBindPort(port),
+      canBindPort: (host, port) => inspector.canBindPort(host, port),
     })
     views.push({
       id: service.id,
@@ -209,7 +212,7 @@ export type ProxyControlOptions = {
   logsPath: string
   inspector: ProcessInspector
   controller: ProxyProcessController
-  healthCheck?: (port: number, path: string) => Promise<boolean>
+  healthCheck?: ProxyHealthCheck
   now: Date
 }
 
@@ -350,6 +353,7 @@ async function startProxyUnlocked(
   if (ports.length === 0) {
     throw conflict('El servicio no tiene puertos configurados.')
   }
+  const bindHost = getProxySettings(db).host ?? '0.0.0.0'
   const listeners = await options.inspector.listListeners(
     ports.map((row) => row.port),
   )
@@ -360,7 +364,7 @@ async function startProxyUnlocked(
   if (listeners.length > 0) {
     let blockedPort: number | null = null
     for (const row of ports) {
-      if (!(await options.inspector.canBindPort(row.port))) {
+      if (!(await options.inspector.canBindPort(bindHost, row.port))) {
         blockedPort = row.port
         break
       }
@@ -406,6 +410,7 @@ async function startProxyUnlocked(
       ports: ports.map((row) => row.port),
       primaryPort,
       logFile: logPathFor(options.logsPath, service.slug),
+      host: bindHost,
     })
     pid = started.pid
   } catch (error) {

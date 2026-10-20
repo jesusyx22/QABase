@@ -134,3 +134,4 @@ Solo lectura. QABase **no** llama a la web institucional: el VPS no la alcanza. 
 - En este equipo no hay clave SSH ni `sshpass`/`plink`: para operar el VPS desde el agente, instala `paramiko` en `%TEMP%` y no persistas credenciales en el repo.
 - `npm install` con npm 11 reescribe `package-lock.json` (marcadores `peer` y `libc`); revierte ese cambio si no se buscaba actualizar dependencias.
 - Los proxies de `scripts/proxies/**` usan `.cjs`: el `package.json` raíz declara `"type": "module"` y un `.js` con `require` falla como ESM.
+- `proxy_settings.host` es la interfaz de enlace: QABase la pasa como `BIND_HOST`; cambiarla exige reiniciar los servicios.

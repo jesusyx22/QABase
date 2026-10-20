@@ -11,17 +11,18 @@ puertos, monitoreo, arranque/parada manual y logs, sin arranque automático.
 
 - Rama **`feat/proxies-servicios`**, publicada en `origin`; el trabajo de esta
   sesión está commiteado y pusheado.
-- `npm run verify` en verde en Windows: 45 archivos, **339 tests**, typecheck,
+- `npm run verify` en verde en Windows: 45 archivos, **340 tests**, typecheck,
   lint y build.
 - Migración `010-proxy-services` aplicada en la base local.
 - Catálogo sincronizado desde `scripts/proxies/`: GitLab, Mantis BT y Proxy
   Sentinel, con 4 rutas y 4 puertos.
-- Estado real verificado: los tres aparecen **Activo**; Sentinel con health UP.
-  **GitLab (PID 27360) y Mantis (PID 28952) ya están gestionados por QABase**
-  (`managed=true`); solo Sentinel sigue como proceso externo.
-- GitLab comparte el puerto 8081 con espejos IPv6 de Docker/WSL. El estado usa
-  `canBindPort` para distinguir un espejo de un conflicto real y permitir el
-  arranque en IPv4.
+- Estado real verificado: los tres aparecen **Activo**, **gestionados por QABase**
+  (`managed=true`) y Sentinel con health UP.
+- Los tres escuchan solo en **10.4.24.18**: `proxy_settings.host` se pasa como
+  `BIND_HOST`; el puerto 8081 conserva espejos IPv6 de Docker/WSL, ya ignorados
+  por `canBindPort`.
+- Cambiar la IP de enlace no reinicia los servicios; hay que reiniciarlos desde
+  la UI para aplicar la nueva interfaz.
 - Los proxies usan `.cjs`: el `package.json` raíz es `"type": "module"` y los
   `.js` con `require` fallaban como ESM. El antiguo `runner.js` externo de
   Mantis se retiró para que no reinicie el proceso a espaldas de QABase.
@@ -58,16 +59,17 @@ puertos, monitoreo, arranque/parada manual y logs, sin arranque automático.
 - Auditoría de inicio, parada, reinicio, fallos y cambio de IP global.
 - UI y tests de página con estados, permisos y confirmaciones.
 - Smoke real de arranque/parada con un proxy temporal en el puerto 3999.
-- Prueba real de Mantis y GitLab: detener sus procesos externos, arrancarlos
-  desde QABase, verificar `managed=true` y respuestas 302/200.
+- Prueba real de GitLab, Mantis y Sentinel: arrancados desde QABase,
+  `managed=true`, enlace en 10.4.24.18 y respuestas 302/200/health UP.
+- La IP global pasó a ser la interfaz de enlace de todos los proxies.
 
 ## Pendiente
 
-- Repetir con Sentinel el cambio a `managed=true`; GitLab y Mantis ya están
-  gestionados.
 - Validar la pantalla en navegador y el aviso de proceso externo.
 - No volver a arrancar el antiguo `runner.js` de Mantis mientras QABase gestione
   el servicio.
+- Si cambia la IP de Ethernet, actualizar la IP de enlace y reiniciar los tres
+  servicios.
 - Decidir si se añade arranque automático en una rama posterior.
 
 ## Archivos clave
@@ -88,7 +90,7 @@ puertos, monitoreo, arranque/parada manual y logs, sin arranque automático.
 ```text
 npm run verify
 Test Files  45 passed (45)
-Tests       339 passed (339)
+Tests       340 passed (340)
 typecheck, lint y build en verde
 ```
 

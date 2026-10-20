@@ -338,6 +338,28 @@ describe('estado de servicios', () => {
     ).toMatchObject({ status: 'error', health: 'down' })
   })
 
+  it('usa la IP global como host del health check', async () => {
+    const db = await setup()
+    updateProxySettings(db, actor, { host: '10.4.24.18', now })
+    syncProxyCatalog(db, root, now)
+    let seen: { host: string; port: number; path: string } | null = null
+    await listProxies(db, {
+      inspector: inspectorWith([
+        nodeListener(3500, 'sentinel', 'server.cjs'),
+      ]),
+      healthCheck: async (host, port, path) => {
+        seen = { host, port, path }
+        return true
+      },
+      now,
+    })
+    expect(seen).toEqual({
+      host: '10.4.24.18',
+      port: 3500,
+      path: '/bridge-health',
+    })
+  })
+
   it('configura la IP global con versión y audita el cambio', async () => {
     const db = await setup()
     expect(getProxySettings(db)).toEqual({ host: null, version: null })
@@ -390,6 +412,7 @@ describe('operación de servicios', () => {
       },
     })
     syncProxyCatalog(db, dir, now)
+    updateProxySettings(db, actor, { host: '10.4.24.18', now })
     const logs = mkdtempSync(join(tmpdir(), 'qabase-logs-'))
     const inspector = mutableInspector()
     const controller = fakeController(
@@ -414,6 +437,7 @@ describe('operación de servicios', () => {
       entry: 'proxy.js',
       ports: [9200],
       primaryPort: 9200,
+      host: '10.4.24.18',
     })
     expect(controller.started[0]!.serviceDir).toContain('demo')
 

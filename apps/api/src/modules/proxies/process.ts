@@ -24,10 +24,16 @@ export interface ProcessInspector {
   listListeners(ports: readonly number[]): Promise<PortListener[]>
   isProcessAlive(pid: number): Promise<boolean>
   describeProcess(pid: number): Promise<ProcessInfo | null>
-  canBindPort(port: number): Promise<boolean>
+  canBindPort(host: string, port: number): Promise<boolean>
 }
 
-export function canBindPort(port: number, host = '0.0.0.0'): Promise<boolean> {
+export type ProxyHealthCheck = (
+  host: string,
+  port: number,
+  path: string,
+) => Promise<boolean>
+
+export function canBindPort(host: string, port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const server = createServer()
     server.once('error', () => resolve(false))
@@ -150,8 +156,8 @@ export function createSystemProcessInspector(): ProcessInspector {
         return (error as NodeJS.ErrnoException).code === 'EPERM'
       }
     },
-    async canBindPort(port) {
-      return canBindPort(port)
+    async canBindPort(host, port) {
+      return canBindPort(host, port)
     },
     async describeProcess(pid) {
       if (!Number.isInteger(pid) || pid <= 0) {
@@ -200,11 +206,13 @@ if ($p) {
 }
 
 export async function defaultHealthCheck(
+  host: string,
   port: number,
   path: string,
 ): Promise<boolean> {
+  const target = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host
   try {
-    const response = await fetch(`http://127.0.0.1:${port}${path}`, {
+    const response = await fetch(`http://${target}:${port}${path}`, {
       redirect: 'manual',
       signal: AbortSignal.timeout(1500),
     })
@@ -221,8 +229,9 @@ export type InspectServiceInput = {
   listeners: PortListener[]
   alive: boolean
   now: Date
-  healthCheck: (port: number, path: string) => Promise<boolean>
-  canBindPort: (port: number) => Promise<boolean>
+  bindHost: string
+  healthCheck: ProxyHealthCheck
+  canBindPort: (host: string, port: number) => Promise<boolean>
 }
 
 export async function inspectService(
@@ -235,6 +244,7 @@ export async function inspectService(
     listeners,
     alive,
     now,
+    bindHost,
     healthCheck,
     canBindPort,
   } = input
@@ -308,7 +318,7 @@ export async function inspectService(
         }
       }
     }
-    if (await canBindPort(blocker.port)) {
+    if (await canBindPort(bindHost, blocker.port)) {
       return {
         status: 'stopped',
         pid: null,
@@ -362,7 +372,7 @@ export async function inspectService(
     ports.find((row) => row.isPrimary === 1)?.port ?? ports[0]!.port
 
   if (service.healthPath) {
-    const healthy = await healthCheck(primary, service.healthPath)
+    const healthy = await healthCheck(bindHost, primary, service.healthPath)
     return {
       status: healthy ? 'active' : 'error',
       pid: listener.pid > 0 ? listener.pid : null,

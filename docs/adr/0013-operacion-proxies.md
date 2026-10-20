@@ -34,6 +34,9 @@ aplicación local en loopback y la PC permanece encendida casi siempre.
    líneas en el detalle.
 8. Los permisos se separan en `proxies.ver`, `proxies.operar` y
    `proxies.gestionar`.
+9. La IP global de `proxy_settings` es también la interfaz de enlace: se pasa
+   como `BIND_HOST` y los proxies escuchan solo en esa IPv4. Cambiarla exige
+   reiniciar los servicios.
 
 ## Alternativas descartadas
 
@@ -57,6 +60,8 @@ aplicación local en loopback y la PC permanece encendida casi siempre.
   de procesos solo funciona en el host de los proxies.
 - Un proxy iniciado fuera de QABase puede adoptarse, pero detenerlo exige
   confirmación.
+- Enlazar a una IPv4 concreta elimina el acceso por las demás interfaces
+  (incluido localhost) y falla si esa IP no está asignada al arrancar.
 - La migración `010` reconstruye el modelo; no hay datos que conservar.
 - El ADR 0012 sigue vigente para el catálogo de endpoints y la IP global; esta
   decisión reemplaza solo la prohibición de ejecutar y monitorear.

@@ -12,7 +12,10 @@ import {
   stopProxy,
   updateProxySettings,
 } from '../modules/proxies/service'
-import type { ProcessInspector } from '../modules/proxies/process'
+import type {
+  ProcessInspector,
+  ProxyHealthCheck,
+} from '../modules/proxies/process'
 import type { ProxyProcessController } from '../modules/proxies/control'
 
 const version = { type: 'integer', minimum: 1 } as const
@@ -34,7 +37,7 @@ export type ProxyRouteOptions = {
   logsPath: string
   inspector: ProcessInspector
   controller: ProxyProcessController
-  healthCheck: (port: number, path: string) => Promise<boolean>
+  healthCheck: ProxyHealthCheck
 }
 
 export function registerProxyRoutes(

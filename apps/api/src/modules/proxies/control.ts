@@ -22,6 +22,7 @@ export type StartProcessInput = {
   ports: number[]
   primaryPort: number
   logFile: string
+  host: string
 }
 
 export interface ProxyProcessController {
@@ -104,6 +105,7 @@ export function createSystemProcessController(): ProxyProcessController {
             env: {
               ...process.env,
               PORT: String(input.primaryPort),
+              BIND_HOST: input.host,
             },
           },
         )

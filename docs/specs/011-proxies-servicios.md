@@ -89,7 +89,10 @@ UNIQUE (service_id, path)
 
 ### `proxy_settings`
 
-Se conserva la tabla actual con la IPv4 global del puente.
+Se conserva la tabla actual. `host` es la IPv4 de **enlace**: QABase la pasa a
+cada proceso como `BIND_HOST` y los proxies escuchan solo en esa interfaz. Si
+está vacía, se usa `0.0.0.0` para no romper instalaciones existentes. Cambiarla
+no reinicia los servicios; hay que reiniciarlos para aplicar la nueva interfaz.
 
 ## Manifiesto
 
@@ -138,7 +141,8 @@ Cada servicio vive en `scripts/proxies/<slug>/` y declara `service.json`:
 
 ## Procesos
 
-- QABase lanza `node <entry>` detached, con `cwd` en la carpeta del servicio.
+- QABase lanza `node <entry>` detached, con `cwd` en la carpeta del servicio y
+  `BIND_HOST=<host>` para que escuche solo en la IPv4 configurada.
 - stdout y stderr se anexan a `data/logs/<slug>.log`, con rotación básica.
 - Se guarda el PID y la hora de arranque; al reiniciar QABase se reconcilia por
   PID y puertos.
