@@ -18,4 +18,5 @@ Incluye solo lo necesario:
 
 No dupliques specs, ADR ni diffs: referéncialos por ruta.
 No actualices si no hay un delta real; en ese caso dilo y no cambies el archivo.
-No hagas commit ni push sin permiso explícito.
+No hagas commit ni push a `main` sin permiso explícito. En ramas de trabajo,
+commit y push son parte del cierre del hito.

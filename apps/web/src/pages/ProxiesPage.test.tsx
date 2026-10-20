@@ -10,35 +10,30 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProxiesPage } from './ProxiesPage'
 import {
-  createProxy,
-  requestAccessOptions,
   requestProxies,
-  updateProxy,
+  requestProxyLogs,
+  requestRestartProxy,
+  requestStartProxy,
+  requestStopProxy,
   updateProxySettings,
   type ProxyListResponse,
-  type ProxyView,
+  type ProxyServiceView,
 } from '@/features/proxies/api'
-import { requestAccessAssignments } from '@/features/access-assignments/api'
-import type { Access } from '@/features/accesses/api'
 
 vi.mock('@/features/proxies/api', () => ({
   requestProxies: vi.fn(),
-  requestAccessOptions: vi.fn(),
   updateProxySettings: vi.fn(),
-  createProxy: vi.fn(),
-  updateProxy: vi.fn(),
+  requestStartProxy: vi.fn(),
+  requestStopProxy: vi.fn(),
+  requestRestartProxy: vi.fn(),
+  requestProxyLogs: vi.fn(),
 }))
 
-vi.mock('@/features/access-assignments/api', () => ({
-  requestAccessAssignments: vi.fn().mockResolvedValue({
-    access: { id: 1, address: '10.20.10.15', port: 443, portEnd: 443 },
-    counts: { current: 0, expiring: 0, expired: 0, total: 0 },
-    current: [],
-    expired: [],
-  }),
-}))
-
-let currentPermissions: string[] = ['proxies.ver', 'proxies.gestionar']
+let currentPermissions: string[] = [
+  'proxies.ver',
+  'proxies.operar',
+  'proxies.gestionar',
+]
 
 vi.mock('@/features/auth/useAuth', () => ({
   useAuth: () => ({
@@ -59,103 +54,197 @@ vi.mock('@/features/auth/useAuth', () => ({
 }))
 
 const requestProxiesMock = vi.mocked(requestProxies)
-const requestAccessOptionsMock = vi.mocked(requestAccessOptions)
 const updateProxySettingsMock = vi.mocked(updateProxySettings)
-const createProxyMock = vi.mocked(createProxy)
-const updateProxyMock = vi.mocked(updateProxy)
-const requestAccessAssignmentsMock = vi.mocked(requestAccessAssignments)
+const requestStartProxyMock = vi.mocked(requestStartProxy)
+const requestStopProxyMock = vi.mocked(requestStopProxy)
+const requestRestartProxyMock = vi.mocked(requestRestartProxy)
+const requestProxyLogsMock = vi.mocked(requestProxyLogs)
 
-const sampleAccess1: Access = {
+const sampleService1: ProxyServiceView = {
   id: 1,
-  address: '10.20.10.15',
-  port: 443,
-  portEnd: 443,
-  environment: 'production',
-  protocol: 'tcp',
-  detail: 'API de pagos',
-  applications: null,
-  urls: null,
-  isActive: true,
-  version: 1,
-  createdAt: '2026-10-15T10:00:00.000Z',
-  updatedAt: '2026-10-15T10:00:00.000Z',
-}
-
-const sampleAccess2: Access = {
-  id: 2,
-  address: 'qa-service.local',
-  port: 8080,
-  portEnd: 8080,
+  slug: 'sentinel',
+  name: 'Proxy Sentinel',
   environment: 'qa',
-  protocol: null,
-  detail: 'Servicio QA',
-  applications: null,
-  urls: null,
-  isActive: false, // inactivo!
-  version: 2,
-  createdAt: '2026-10-16T12:00:00.000Z',
-  updatedAt: '2026-10-17T14:00:00.000Z',
-}
-
-const sampleAccess3: Access = {
-  id: 3,
-  address: '192.168.5.10',
-  port: 3000,
-  portEnd: 3005,
-  environment: 'development',
-  protocol: 'both',
-  detail: 'Mock dev',
-  applications: null,
-  urls: null,
+  healthPath: '/bridge-health',
   isActive: true,
-  version: 1,
-  createdAt: '2026-10-18T08:00:00.000Z',
-  updatedAt: '2026-10-18T08:00:00.000Z',
+  createdAt: '2026-10-01T00:00:00.000Z',
+  updatedAt: '2026-10-02T00:00:00.000Z',
+  ports: [
+    { port: 3500, isPrimary: true, listening: true },
+  ],
+  routes: [
+    {
+      id: 10,
+      path: '/realms',
+      target: 'http://10.5.81.60:8080',
+      detail: 'Keycloak Auth',
+      access: {
+        id: 1,
+        address: '10.5.81.60',
+        port: 8080,
+        portEnd: 8080,
+        environment: 'qa',
+        detail: 'Servidor Keycloak UAT',
+        isActive: true,
+      },
+    },
+    {
+      id: 11,
+      path: '/customer-credit-rating-s',
+      target: 'http://apps-test.losandes.pe',
+      detail: null,
+      access: null, // Sin acceso en el catálogo
+    },
+  ],
+  runtime: {
+    status: 'active',
+    pid: 25940,
+    managed: true,
+    health: 'up',
+    detail: null,
+    startedAt: '2026-10-20T10:00:00.000Z',
+  },
 }
 
-const sampleProxies: ProxyView[] = [
-  {
-    id: 101,
-    port: 9001,
-    detail: 'Proxy Pagos Producción',
-    isActive: true,
-    version: 1,
-    createdAt: '2026-10-20T00:00:00.000Z',
-    updatedAt: '2026-10-20T00:00:00.000Z',
-    access: sampleAccess1,
+const sampleService2: ProxyServiceView = {
+  id: 2,
+  slug: 'gitlab',
+  name: 'GitLab Proxy',
+  environment: 'development',
+  healthPath: null,
+  isActive: false, // Inactivo!
+  createdAt: '2026-10-15T00:00:00.000Z',
+  updatedAt: '2026-10-15T00:00:00.000Z',
+  ports: [
+    { port: 8081, isPrimary: true, listening: false },
+  ],
+  routes: [
+    {
+      id: 20,
+      path: '/',
+      target: 'http://10.5.5.201:80',
+      detail: 'GitLab CE',
+      access: null,
+    },
+  ],
+  runtime: {
+    status: 'stopped',
+    pid: null,
+    managed: true,
+    health: 'skipped',
+    detail: 'Detenido manualmente',
+    startedAt: null,
   },
-  {
-    id: 102,
-    port: 9002,
-    detail: 'Proxy Servicio QA Inactivo',
-    isActive: false,
-    version: 2,
-    createdAt: '2026-10-20T01:00:00.000Z',
-    updatedAt: '2026-10-20T01:00:00.000Z',
-    access: sampleAccess2,
+}
+
+const sampleService3: ProxyServiceView = {
+  id: 3,
+  slug: 'mantis',
+  name: 'Mantis BT',
+  environment: 'production',
+  healthPath: null,
+  isActive: true,
+  createdAt: '2026-10-06T00:00:00.000Z',
+  updatedAt: '2026-10-06T00:00:00.000Z',
+  ports: [
+    { port: 80, isPrimary: true, listening: true },
+    { port: 8080, isPrimary: false, listening: true },
+  ],
+  routes: [
+    {
+      id: 30,
+      path: '/',
+      target: 'http://10.20.22.50:80',
+      detail: 'Mantis Bug Tracker',
+      access: {
+        id: 3,
+        address: '10.20.22.50',
+        port: 80,
+        portEnd: 80,
+        environment: 'production',
+        detail: 'Servidor Mantis',
+        isActive: false, // Inactivo!
+      },
+    },
+  ],
+  runtime: {
+    status: 'conflict',
+    pid: 27780,
+    managed: false, // Externo!
+    health: 'down',
+    detail: 'Puerto 80 ocupado por un proceso no esperado',
+    startedAt: '2026-10-20T08:00:00.000Z',
   },
-]
+}
+
+const sampleService4: ProxyServiceView = {
+  id: 4,
+  slug: 'external-proxy',
+  name: 'External Mock Proxy',
+  environment: 'qa',
+  healthPath: null,
+  isActive: true,
+  createdAt: '2026-10-18T00:00:00.000Z',
+  updatedAt: '2026-10-18T00:00:00.000Z',
+  ports: [{ port: 9000, isPrimary: true, listening: true }],
+  routes: [{ id: 40, path: '/api', target: 'http://10.0.0.5', detail: null, access: null }],
+  runtime: {
+    status: 'active',
+    pid: 99999,
+    managed: false, // Externo!
+    health: 'skipped',
+    detail: null,
+    startedAt: '2026-10-20T09:00:00.000Z',
+  },
+}
+
+const sampleServiceError: ProxyServiceView = {
+  id: 5,
+  slug: 'error-service',
+  name: 'Error Service Proxy',
+  environment: 'qa',
+  healthPath: null,
+  isActive: true,
+  createdAt: '2026-10-19T00:00:00.000Z',
+  updatedAt: '2026-10-19T00:00:00.000Z',
+  ports: [{ port: 9050, isPrimary: true, listening: false }],
+  routes: [{ id: 50, path: '/err', target: 'http://10.0.0.6', detail: null, access: null }],
+  runtime: {
+    status: 'error',
+    pid: 8888,
+    managed: true,
+    health: 'down',
+    detail: 'El proceso falló pero el puerto sigue asociado',
+    startedAt: '2026-10-20T09:30:00.000Z',
+  },
+}
 
 const sampleResponse: ProxyListResponse = {
   settings: {
-    host: '192.168.1.50',
+    host: '10.4.24.18',
     version: 1,
   },
-  proxies: sampleProxies,
+  services: [
+    sampleService1,
+    sampleService2,
+    sampleService3,
+    sampleService4,
+    sampleServiceError,
+  ],
 }
 
 let writeTextMock = vi.fn().mockResolvedValue(undefined)
 
 beforeEach(() => {
   vi.resetAllMocks()
-  currentPermissions = ['proxies.ver', 'proxies.gestionar']
+  currentPermissions = ['proxies.ver', 'proxies.operar', 'proxies.gestionar']
   requestProxiesMock.mockResolvedValue(sampleResponse)
-  requestAccessOptionsMock.mockResolvedValue([sampleAccess3])
-  requestAccessAssignmentsMock.mockResolvedValue({
-    access: sampleAccess1,
-    counts: { current: 0, expiring: 0, expired: 0, total: 0 },
-    current: [],
-    expired: [],
+  requestProxyLogsMock.mockResolvedValue({
+    lines: [
+      '[10:00:00] Server started on port 3500',
+      '[10:01:05] GET /bridge-health 200 - 2 ms',
+      '[10:05:12] Forwarding /realms to http://10.5.81.60:8080',
+    ],
   })
   writeTextMock = vi.fn().mockResolvedValue(undefined)
   Object.defineProperty(navigator, 'clipboard', {
@@ -178,529 +267,518 @@ function renderPage() {
 }
 
 describe('ProxiesPage', () => {
-  it('muestra la IP global y el listado de proxies con detalle, endpoint, acceso, ambiente y estado', async () => {
+  it('muestra la IP global y el listado de servicios con nombre, endpoints, rutas, ambiente y estado', async () => {
     renderPage()
 
     expect(await screen.findByText('Proxies')).toBeInTheDocument()
     expect(
-      screen.getByText('Catálogo de accesos publicados mediante reverse proxy.'),
+      screen.getByText('Catálogo y control de servicios de proxy operables.'),
     ).toBeInTheDocument()
 
     // Tarjeta IP global
-    expect(screen.getByText('192.168.1.50')).toBeInTheDocument()
+    expect(screen.getByText('10.4.24.18')).toBeInTheDocument()
 
-    // Fila 1
-    expect(screen.getByText('Proxy Pagos Producción')).toBeInTheDocument()
-    expect(screen.getByText('192.168.1.50:9001')).toBeInTheDocument()
-    expect(screen.getByText('API de pagos')).toBeInTheDocument()
-    expect(screen.getByText('10.20.10.15:443')).toBeInTheDocument()
-    expect(screen.getByText('Producción')).toBeInTheDocument()
+    // Fila 1: Proxy Sentinel
+    expect(screen.getByText('Proxy Sentinel')).toBeInTheDocument()
+    expect(screen.getByText('sentinel')).toBeInTheDocument()
+    expect(screen.getByText('10.4.24.18:3500')).toBeInTheDocument()
+    expect(screen.getByText('/realms')).toBeInTheDocument()
+    expect(screen.getByText('http://10.5.81.60:8080')).toBeInTheDocument()
+    expect(screen.getByText(/Servidor Keycloak UAT/)).toBeInTheDocument()
+    expect(screen.getAllByText('Sin acceso en el catálogo').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Activo').length).toBeGreaterThan(0)
 
-    // Fila 2 (inactivo por defecto visible)
-    expect(screen.getByText('Proxy Servicio QA Inactivo')).toBeInTheDocument()
-    expect(screen.getByText('192.168.1.50:9002')).toBeInTheDocument()
-    expect(screen.getByText('Servicio QA')).toBeInTheDocument()
-    expect(screen.getByText('qa-service.local:8080')).toBeInTheDocument()
-    expect(screen.getByText('QA')).toBeInTheDocument()
-    expect(screen.getAllByText('Inactivo').length).toBeGreaterThan(0)
-  })
+    // Fila 2: GitLab Proxy
+    expect(screen.getByText('GitLab Proxy')).toBeInTheDocument()
+    expect(screen.getByText('10.4.24.18:8081')).toBeInTheDocument()
+    expect(screen.getByText('Detenido')).toBeInTheDocument()
 
-  it('muestra advertencia "Acceso inactivo" cuando el acceso vinculado está inactivo', async () => {
-    renderPage()
-
-    expect(await screen.findByText('Proxy Servicio QA Inactivo')).toBeInTheDocument()
+    // Fila 3: Mantis BT con 2 puertos y acceso inactivo
+    expect(screen.getByText('Mantis BT')).toBeInTheDocument()
+    expect(screen.getByText('10.4.24.18:80')).toBeInTheDocument()
+    expect(screen.getByText('10.4.24.18:8080')).toBeInTheDocument()
     expect(screen.getByText('Acceso inactivo')).toBeInTheDocument()
+    expect(screen.getByText('Conflicto')).toBeInTheDocument()
   })
 
-  it('copia el endpoint al portapapeles con feedback', async () => {
+  it('los badges Inactivo y Acceso inactivo usan estilo neutro/gris (DESIGN.md)', async () => {
     renderPage()
 
-    await screen.findByText('Proxy Pagos Producción')
+    await screen.findByText('GitLab Proxy')
+
+    // Servicio inactivo
+    const serviceInactiveBadge = screen.getByText('Inactivo')
+    expect(serviceInactiveBadge.className).toContain('text-muted-foreground')
+    expect(serviceInactiveBadge.className).not.toContain('text-warning')
+
+    // Acceso inactivo
+    const accessInactiveBadge = screen.getByText('Acceso inactivo')
+    expect(accessInactiveBadge.className).toContain('text-muted-foreground')
+    expect(accessInactiveBadge.className).not.toContain('text-warning')
+  })
+
+  it('copia el endpoint al portapapeles con feedback accesible', async () => {
+    renderPage()
+
+    await screen.findByText('Proxy Sentinel')
 
     const copyBtn = screen.getByRole('button', {
-      name: 'Copiar endpoint 192.168.1.50:9001',
+      name: 'Copiar endpoint 10.4.24.18:3500',
     })
     fireEvent.click(copyBtn)
 
-    expect(writeTextMock).toHaveBeenCalledWith('192.168.1.50:9001')
-  })
-
-  it('muestra un aviso visible y accesible cuando el portapapeles falla', async () => {
-    writeTextMock.mockRejectedValueOnce(new Error('Bloqueado por el navegador.'))
-
-    renderPage()
-
-    await screen.findByText('Proxy Pagos Producción')
-
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Copiar endpoint 192.168.1.50:9001',
-      }),
-    )
-
-    expect(await screen.findByText('No se pudo copiar')).toBeInTheDocument()
-    expect(
-      screen.getByText(
-        'No se pudo copiar el endpoint. Selecciónalo manualmente.',
-      ),
-    ).toBeInTheDocument()
+    expect(writeTextMock).toHaveBeenCalledWith('10.4.24.18:3500')
   })
 
   it('copia la IP global al portapapeles', async () => {
     renderPage()
 
-    await screen.findByText('192.168.1.50')
+    await screen.findByText('10.4.24.18')
 
     const copyIpBtn = screen.getByRole('button', {
-      name: 'Copiar IP global 192.168.1.50',
+      name: 'Copiar IP global 10.4.24.18',
     })
     fireEvent.click(copyIpBtn)
 
-    expect(writeTextMock).toHaveBeenCalledWith('192.168.1.50')
+    expect(writeTextMock).toHaveBeenCalledWith('10.4.24.18')
   })
 
-  it('muestra aviso y deshabilita "Nuevo proxy" cuando no hay IP global configurada', async () => {
-    requestProxiesMock.mockResolvedValue({
-      settings: { host: null, version: null },
-      proxies: [],
-    })
+  it('muestra aviso cuando el portapapeles falla', async () => {
+    writeTextMock.mockRejectedValueOnce(new Error('Bloqueado.'))
 
     renderPage()
 
-    expect(
-      await screen.findByText('No se ha configurado la IP global del puente.'),
-    ).toBeInTheDocument()
+    await screen.findByText('Proxy Sentinel')
 
-    const newProxyBtn = screen.getByRole('button', { name: 'Nuevo proxy' })
-    expect(newProxyBtn).toBeDisabled()
-  })
-
-  it('filtra proxies por búsqueda en detalle, endpoint y acceso', async () => {
-    renderPage()
-
-    await screen.findByText('Proxy Pagos Producción')
-
-    const searchInput = screen.getByPlaceholderText(/buscar por detalle, endpoint o acceso/i)
-    fireEvent.change(searchInput, { target: { value: '9002' } })
-
-    expect(screen.queryByText('Proxy Pagos Producción')).not.toBeInTheDocument()
-    expect(screen.getByText('Proxy Servicio QA Inactivo')).toBeInTheDocument()
-
-    fireEvent.change(searchInput, { target: { value: 'pagos' } })
-
-    expect(screen.getByText('Proxy Pagos Producción')).toBeInTheDocument()
-    expect(screen.queryByText('Proxy Servicio QA Inactivo')).not.toBeInTheDocument()
-  })
-
-  it('encuentra por la dirección y el puerto completos del acceso', async () => {
-    renderPage()
-
-    await screen.findByText('Proxy Pagos Producción')
-
-    fireEvent.change(
-      screen.getByPlaceholderText(/buscar por detalle, endpoint o acceso/i),
-      { target: { value: '10.20.10.15:443' } },
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Copiar endpoint 10.4.24.18:3500',
+      }),
     )
 
-    expect(screen.getByText('Proxy Pagos Producción')).toBeInTheDocument()
-    expect(screen.queryByText('Proxy Servicio QA Inactivo')).not.toBeInTheDocument()
+    expect(await screen.findByText('No se pudo copiar')).toBeInTheDocument()
   })
 
-  it('filtra proxies por ambiente y por estado', async () => {
+  it('filtra servicios por búsqueda en nombre, slug, puertos y rutas', async () => {
     renderPage()
 
-    await screen.findByText('Proxy Pagos Producción')
+    await screen.findByText('Proxy Sentinel')
 
-    // Filtro ambiente
+    const searchInput = screen.getByPlaceholderText(
+      /buscar por nombre, ruta, destino o puerto/i,
+    )
+    fireEvent.change(searchInput, { target: { value: '8081' } })
+
+    expect(screen.queryByText('Proxy Sentinel')).not.toBeInTheDocument()
+    expect(screen.getByText('GitLab Proxy')).toBeInTheDocument()
+
+    fireEvent.change(searchInput, { target: { value: 'keycloak' } })
+
+    expect(screen.getByText('Proxy Sentinel')).toBeInTheDocument()
+    expect(screen.queryByText('GitLab Proxy')).not.toBeInTheDocument()
+  })
+
+  it('filtra servicios por ambiente y por estado', async () => {
+    renderPage()
+
+    await screen.findByText('Proxy Sentinel')
+
+    // Filtro ambiente: Desarrollo
     const envTrigger = screen.getByTestId('proxy-filter-environment')
     fireEvent.click(envTrigger)
 
-    const qaOption = await screen.findByRole('option', { name: 'QA' })
-    fireEvent.pointerDown(qaOption)
-    fireEvent.pointerUp(qaOption)
-    fireEvent.click(qaOption)
+    const devOption = await screen.findByRole('option', { name: 'Desarrollo' })
+    fireEvent.pointerDown(devOption)
+    fireEvent.pointerUp(devOption)
+    fireEvent.click(devOption)
 
     await waitFor(() => {
-      expect(screen.queryByText('Proxy Pagos Producción')).not.toBeInTheDocument()
-      expect(screen.getByText('Proxy Servicio QA Inactivo')).toBeInTheDocument()
+      expect(screen.queryByText('Proxy Sentinel')).not.toBeInTheDocument()
+      expect(screen.getByText('GitLab Proxy')).toBeInTheDocument()
     })
 
-    // Filtro estado
+    // Filtro estado: Activo
     const statusTrigger = screen.getByTestId('proxy-filter-status')
     fireEvent.click(statusTrigger)
 
-    const activeOption = await screen.findByRole('option', { name: 'Activos' })
+    const activeOption = await screen.findByRole('option', { name: 'Activo' })
     fireEvent.pointerDown(activeOption)
     fireEvent.pointerUp(activeOption)
     fireEvent.click(activeOption)
 
-    // Ningún QA es activo en nuestros datos de prueba
+    // GitLab está detenido, así que debe dar 0 resultados
     await waitFor(() => {
       expect(screen.getByText('Sin resultados')).toBeInTheDocument()
     })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar filtros' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Proxy Sentinel')).toBeInTheDocument()
+    })
   })
 
-  it('muestra estado vacío cuando no hay proxies', async () => {
+  it('muestra estado vacío cuando no hay servicios en el catálogo', async () => {
     requestProxiesMock.mockResolvedValue({
-      settings: { host: '192.168.1.50', version: 1 },
-      proxies: [],
+      settings: { host: '10.4.24.18', version: 1 },
+      services: [],
     })
 
     renderPage()
 
-    expect(await screen.findByText('Sin proxies')).toBeInTheDocument()
+    expect(await screen.findByText('Sin servicios de proxy')).toBeInTheDocument()
     expect(
-      screen.getByText('Todavía no hay proxies publicados en el catálogo.'),
+      screen.getByText(
+        'Todavía no hay servicios de proxy registrados en el catálogo.',
+      ),
     ).toBeInTheDocument()
   })
 
   it('muestra error del servidor y permite reintentar', async () => {
-    requestProxiesMock.mockRejectedValueOnce(new Error('Fallo de red.'))
+    requestProxiesMock.mockRejectedValueOnce(new Error('Fallo de conexión.'))
     requestProxiesMock.mockResolvedValueOnce(sampleResponse)
 
     renderPage()
 
-    expect(await screen.findByText('No se pudieron cargar los proxies')).toBeInTheDocument()
-    expect(screen.getByText('Fallo de red.')).toBeInTheDocument()
+    expect(
+      await screen.findByText('No se pudieron cargar los servicios'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Fallo de conexión.')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
 
-    expect(await screen.findByText('Proxy Pagos Producción')).toBeInTheDocument()
+    expect(await screen.findByText('Proxy Sentinel')).toBeInTheDocument()
   })
 
-  it('configura la IP global inicial sin enviar una versión nula', async () => {
-    requestProxiesMock.mockResolvedValue({
-      settings: { host: null, version: null },
-      proxies: [],
-    })
-    updateProxySettingsMock.mockResolvedValue({
-      host: '10.0.0.1',
-      version: 1,
-    })
-
+  it('permite actualizar manualmente los servicios con el botón Actualizar', async () => {
     renderPage()
 
-    await screen.findByText('Sin proxies')
-    fireEvent.click(screen.getByRole('button', { name: /configurar ip/i }))
+    await screen.findByText('Proxy Sentinel')
 
-    fireEvent.change(screen.getByLabelText(/dirección ipv4/i), {
-      target: { value: '10.0.0.1' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar IP' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Actualizar servicios' }))
 
     await waitFor(() => {
-      expect(updateProxySettingsMock).toHaveBeenCalledWith({
-        host: '10.0.0.1',
-      })
+      expect(requestProxiesMock).toHaveBeenCalledTimes(2)
     })
   })
 
-  it('permite a Administrador configurar o cambiar la IP global con confirmación', async () => {
-    updateProxySettingsMock.mockResolvedValue({
-      host: '10.0.0.1',
-      version: 2,
+  it('inicia un servicio detenido llamando a requestStartProxy', async () => {
+    requestStartProxyMock.mockResolvedValue({
+      ...sampleService2,
+      runtime: {
+        ...sampleService2.runtime,
+        status: 'active',
+        pid: 12345,
+      },
     })
 
     renderPage()
 
-    await screen.findByText('192.168.1.50')
+    await screen.findByText('GitLab Proxy')
 
-    fireEvent.click(screen.getByRole('button', { name: /cambiar ip/i }))
+    const startBtn = screen.getByRole('button', {
+      name: 'Iniciar servicio GitLab Proxy',
+    })
+    fireEvent.click(startBtn)
 
-    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(requestStartProxyMock).toHaveBeenCalledWith(2)
+    })
+  })
+
+  it('detiene un servicio activo gestionado con diálogo de confirmación', async () => {
+    requestStopProxyMock.mockResolvedValue({
+      ...sampleService1,
+      runtime: {
+        ...sampleService1.runtime,
+        status: 'stopped',
+        pid: null,
+      },
+    })
+
+    renderPage()
+
+    await screen.findByText('Proxy Sentinel')
+
+    const stopBtn = screen.getByRole('button', {
+      name: 'Detener servicio Proxy Sentinel',
+    })
+    fireEvent.click(stopBtn)
+
+    // Diálogo de confirmación
+    const dialog = await screen.findByRole('dialog')
     expect(
-      screen.getByText(/esta acción modificará el endpoint de 2 proxies publicados/i),
+      within(dialog).getByRole('heading', { name: 'Detener proxy' }),
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).getByText(/¿estás seguro de que deseas detener el servicio "proxy sentinel"\?/i),
     ).toBeInTheDocument()
 
-    const hostInput = screen.getByLabelText(/dirección ipv4/i)
-    fireEvent.change(hostInput, { target: { value: '10.0.0.1' } })
-
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar IP' }))
+    // Confirmar
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Detener' }))
 
     await waitFor(() => {
-      expect(updateProxySettingsMock).toHaveBeenCalledWith({
-        host: '10.0.0.1',
-        version: 1,
-      })
+      expect(requestStopProxyMock).toHaveBeenCalledWith(1, false)
     })
   })
 
-  it('permite a Administrador crear un nuevo proxy', async () => {
-    createProxyMock.mockResolvedValue({
-      id: 103,
-      port: 9003,
-      detail: 'Mock Dev Proxy',
-      isActive: true,
-      version: 1,
-      createdAt: '2026-10-20T02:00:00.000Z',
-      updatedAt: '2026-10-20T02:00:00.000Z',
-      access: sampleAccess3,
+  it('advierte y pasa confirmExternal=true al detener un proceso no gestionado por QABase', async () => {
+    requestStopProxyMock.mockResolvedValue({
+      ...sampleService4,
+      runtime: {
+        ...sampleService4.runtime,
+        status: 'stopped',
+        pid: null,
+      },
     })
 
     renderPage()
 
-    await screen.findByText('Proxy Pagos Producción')
+    await screen.findByText('External Mock Proxy')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Nuevo proxy' }))
-
-    expect(await screen.findByRole('dialog')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Nuevo proxy' })).toBeInTheDocument()
-
-    // Selector de acceso
-    const selectTrigger = screen.getByTestId('proxy-form-access-select')
-    fireEvent.click(selectTrigger)
-
-    const accessOption = await screen.findByRole('option', {
-      name: /mock dev/i,
+    const stopBtn = screen.getByRole('button', {
+      name: 'Detener servicio External Mock Proxy',
     })
-    fireEvent.click(accessOption)
-
-    // Puerto
-    fireEvent.change(screen.getByLabelText('Puerto'), {
-      target: { value: '9003' },
-    })
-
-    // Detalle
-    fireEvent.change(screen.getByLabelText('Detalle'), {
-      target: { value: 'Mock Dev Proxy' },
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: 'Publicar proxy' }))
-
-    await waitFor(() => {
-      expect(createProxyMock).toHaveBeenCalledWith({
-        accessId: 3,
-        port: 9003,
-        detail: 'Mock Dev Proxy',
-      })
-    })
-  })
-
-  it('permite reintentar la carga de accesos del formulario', async () => {
-    requestAccessOptionsMock
-      .mockRejectedValueOnce(new Error('No se pudieron cargar los accesos.'))
-      .mockResolvedValueOnce([sampleAccess3])
-
-    renderPage()
-
-    await screen.findByText('Proxy Pagos Producción')
-    fireEvent.click(screen.getByRole('button', { name: 'Nuevo proxy' }))
-
-    expect(
-      await screen.findByText('No se pudieron cargar los accesos.'),
-    ).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
-
-    await waitFor(() => {
-      expect(requestAccessOptionsMock).toHaveBeenCalledTimes(2)
-    })
-    expect(
-      await screen.findByTestId('proxy-form-access-select'),
-    ).toBeInTheDocument()
-  })
-
-  it('permite a Administrador editar un proxy existente', async () => {
-    updateProxyMock.mockResolvedValue({
-      ...sampleProxies[0]!,
-      detail: 'Proxy Pagos Editado',
-      port: 9010,
-      version: 2,
-    })
-
-    renderPage()
-
-    await screen.findByText('Proxy Pagos Producción')
-
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Editar proxy Proxy Pagos Producción',
-      }),
-    )
-
-    expect(await screen.findByRole('dialog')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Editar proxy' })).toBeInTheDocument()
-
-    fireEvent.change(screen.getByLabelText('Detalle'), {
-      target: { value: 'Proxy Pagos Editado' },
-    })
-    fireEvent.change(screen.getByLabelText('Puerto'), {
-      target: { value: '9010' },
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
-
-    await waitFor(() => {
-      expect(updateProxyMock).toHaveBeenCalledWith(101, {
-        accessId: 1,
-        port: 9010,
-        detail: 'Proxy Pagos Editado',
-        version: 1,
-      })
-    })
-  })
-
-  it('permite editar un proxy cuyo acceso está inactivo conservando el vínculo', async () => {
-    updateProxyMock.mockResolvedValue({
-      ...sampleProxies[1]!,
-      detail: 'Proxy QA Editado',
-      version: 3,
-    })
-
-    renderPage()
-
-    await screen.findByText('Proxy Servicio QA Inactivo')
-
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Editar proxy Proxy Servicio QA Inactivo',
-      }),
-    )
-
-    expect(await screen.findByRole('dialog')).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Detalle'), {
-      target: { value: 'Proxy QA Editado' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
-
-    await waitFor(() => {
-      expect(updateProxyMock).toHaveBeenCalledWith(102, {
-        accessId: 2,
-        port: 9002,
-        detail: 'Proxy QA Editado',
-        version: 2,
-      })
-    })
-  })
-
-  it('permite a Administrador desactivar y reactivar un proxy con confirmación', async () => {
-    updateProxyMock.mockResolvedValue({
-      ...sampleProxies[0]!,
-      isActive: false,
-      version: 2,
-    })
-
-    renderPage()
-
-    await screen.findByText('Proxy Pagos Producción')
-
-    // Desactivar
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Desactivar proxy Proxy Pagos Producción',
-      }),
-    )
+    fireEvent.click(stopBtn)
 
     const dialog = await screen.findByRole('dialog')
     expect(
-      within(dialog).getByRole('heading', { name: 'Desactivar proxy' }),
+      within(dialog).getByText(/proceso externo no gestionado por qabase/i),
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).getByText(/este proceso fue iniciado fuera de qabase \(pid 99999\)/i),
     ).toBeInTheDocument()
 
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Desactivar' }))
+    // Confirmar
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Detener' }))
 
     await waitFor(() => {
-      expect(updateProxyMock).toHaveBeenCalledWith(101, {
-        isActive: false,
-        version: 1,
-      })
+      expect(requestStopProxyMock).toHaveBeenCalledWith(4, true)
     })
   })
 
-  it('permite reactivar un proxy inactivo con confirmación', async () => {
-    updateProxyMock.mockResolvedValue({
-      ...sampleProxies[1]!,
-      isActive: true,
-      version: 3,
+  it('reinicia un servicio activo con confirmación', async () => {
+    requestRestartProxyMock.mockResolvedValue(sampleService1)
+
+    renderPage()
+
+    await screen.findByText('Proxy Sentinel')
+
+    const restartBtn = screen.getByRole('button', {
+      name: 'Reiniciar servicio Proxy Sentinel',
+    })
+    fireEvent.click(restartBtn)
+
+    const dialog = await screen.findByRole('dialog')
+    expect(
+      within(dialog).getByRole('heading', { name: 'Reiniciar proxy' }),
+    ).toBeInTheDocument()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Reiniciar' }))
+
+    await waitFor(() => {
+      expect(requestRestartProxyMock).toHaveBeenCalledWith(1, false)
+    })
+  })
+
+  it('en estado error ofrece Iniciar, Detener y Reiniciar; en conflict NO ofrece Detener', async () => {
+    renderPage()
+
+    await screen.findByText('Error Service Proxy')
+
+    // Servicio en error: debe ofrecer Iniciar, Detener y Reiniciar
+    expect(
+      screen.getByRole('button', { name: 'Iniciar servicio Error Service Proxy' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Detener servicio Error Service Proxy' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Reiniciar servicio Error Service Proxy' }),
+    ).toBeInTheDocument()
+
+    // Servicio en conflict (Mantis BT): NO debe ofrecer Detener
+    expect(
+      screen.queryByRole('button', { name: 'Detener servicio Mantis BT' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('actualiza el diálogo de detalle automáticamente si el servicio cambia mientras está abierto', async () => {
+    renderPage()
+
+    await screen.findByText('Proxy Sentinel')
+
+    // Abrir detalle
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ver detalle de Proxy Sentinel' }),
+    )
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('25940')).toBeInTheDocument()
+    expect(within(dialog).getByText('Saludable (UP)')).toBeInTheDocument()
+
+    // Simular que el auto-refresh / reload recibe cambio de estado en Proxy Sentinel
+    const updatedService1: ProxyServiceView = {
+      ...sampleService1,
+      runtime: {
+        status: 'error',
+        pid: null,
+        managed: true,
+        health: 'down',
+        detail: 'Proceso detenido inesperadamente',
+        startedAt: null,
+      },
+    }
+
+    requestProxiesMock.mockResolvedValueOnce({
+      ...sampleResponse,
+      services: [
+        updatedService1,
+        sampleService2,
+        sampleService3,
+        sampleService4,
+        sampleServiceError,
+      ],
+    })
+
+    // Disparar refresh (el botón en el fondo tiene aria-hidden por el diálogo modal abierto)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Actualizar servicios', hidden: true }),
+    )
+
+    // El diálogo que continúa abierto debe reflejar el nuevo estado derivado
+    await waitFor(() => {
+      expect(within(dialog).getByText('Sin respuesta (DOWN)')).toBeInTheDocument()
+      expect(within(dialog).getByText('Proceso detenido inesperadamente')).toBeInTheDocument()
+    })
+  })
+
+  it('gestiona el rechazo de requestProxyLogs y permite reintentar sin bloquear', async () => {
+    requestProxyLogsMock.mockRejectedValueOnce(
+      new Error('No se pudo leer el archivo de log.'),
+    )
+    requestProxyLogsMock.mockResolvedValueOnce({
+      lines: ['[10:10:00] Log recuperado tras reintento'],
     })
 
     renderPage()
 
-    await screen.findByText('Proxy Servicio QA Inactivo')
+    await screen.findByText('Proxy Sentinel')
 
     fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Reactivar proxy Proxy Servicio QA Inactivo',
-      }),
+      screen.getByRole('button', { name: 'Ver detalle de Proxy Sentinel' }),
     )
 
     const dialog = await screen.findByRole('dialog')
-    expect(
-      within(dialog).getByRole('heading', { name: 'Reactivar proxy' }),
-    ).toBeInTheDocument()
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Reactivar' }))
 
-    await waitFor(() => {
-      expect(updateProxyMock).toHaveBeenCalledWith(102, {
-        isActive: true,
-        version: 2,
-      })
-    })
+    // Debe mostrar el error sin quedar cargando indefinidamente
+    expect(
+      await within(dialog).findByText('No se pudo leer el archivo de log.'),
+    ).toBeInTheDocument()
+
+    // El botón Reintentar o Actualizar logs no debe estar deshabilitado
+    const retryBtn = within(dialog).getByRole('button', { name: 'Reintentar' })
+    expect(retryBtn).not.toBeDisabled()
+
+    fireEvent.click(retryBtn)
+
+    // Tras el reintento exitoso, los logs aparecen
+    expect(
+      await within(dialog).findByText(/log recuperado tras reintento/i),
+    ).toBeInTheDocument()
   })
 
-  it('muestra el error del servidor al crear un proxy duplicado', async () => {
-    createProxyMock.mockRejectedValueOnce(
-      new Error('El puerto ya está reservado.'),
-    )
-
+  it('abre el detalle del servicio y muestra información de proceso, puertos, rutas y logs', async () => {
     renderPage()
 
-    await screen.findByText('Proxy Pagos Producción')
-    fireEvent.click(screen.getByRole('button', { name: 'Nuevo proxy' }))
+    await screen.findByText('Proxy Sentinel')
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ver detalle de Proxy Sentinel' }),
+    )
 
     const dialog = await screen.findByRole('dialog')
-    fireEvent.click(screen.getByTestId('proxy-form-access-select'))
-    fireEvent.click(
-      await screen.findByRole('option', { name: /mock dev/i }),
-    )
-    fireEvent.change(screen.getByLabelText('Puerto'), {
-      target: { value: '9001' },
-    })
-    fireEvent.change(screen.getByLabelText('Detalle'), {
-      target: { value: 'Proxy duplicado' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Publicar proxy' }))
+    expect(within(dialog).getByText('25940')).toBeInTheDocument()
+    expect(within(dialog).getByText('Saludable (UP)')).toBeInTheDocument()
+    expect(within(dialog).getByText('10.4.24.18:3500')).toBeInTheDocument()
+    expect(within(dialog).getByText('Escuchando')).toBeInTheDocument()
 
+    // Logs cargados
     expect(
-      await within(dialog).findByText('El puerto ya está reservado.'),
+      await within(dialog).findByTestId('proxy-log-output'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(
+      within(dialog).getByText(/server started on port 3500/i),
+    ).toBeInTheDocument()
+
+    // Botón refrescar logs
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Actualizar logs' }))
+    await waitFor(() => {
+      expect(requestProxyLogsMock).toHaveBeenCalledTimes(2)
+    })
+
+    // Cerrar
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cerrar' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
   })
 
-  it('oculta acciones de gestión para usuarios sin proxies.gestionar', async () => {
+  it('oculta acciones operativas y de gestión para usuarios de consulta (solo proxies.ver)', async () => {
     currentPermissions = ['proxies.ver']
 
     renderPage()
 
-    await screen.findByText('Proxy Pagos Producción')
-
-    // Sin botón Nuevo proxy
-    expect(screen.queryByRole('button', { name: 'Nuevo proxy' })).not.toBeInTheDocument()
+    await screen.findByText('Proxy Sentinel')
 
     // Sin botón Cambiar IP
     expect(screen.queryByRole('button', { name: /cambiar ip/i })).not.toBeInTheDocument()
 
-    // Sin botones de editar ni desactivar
-    expect(screen.queryByRole('button', { name: /editar proxy/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /desactivar proxy/i })).not.toBeInTheDocument()
+    // Sin botones Iniciar, Detener o Reiniciar
+    expect(screen.queryByRole('button', { name: /iniciar servicio/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /detener servicio/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /reiniciar servicio/i })).not.toBeInTheDocument()
 
-    // Sí ve "Ver acceso" y copiar
-    expect(
-      screen.getByRole('button', { name: 'Ver acceso de Proxy Pagos Producción' }),
-    ).toBeInTheDocument()
-  })
-
-  it('abre el detalle del acceso vinculado al pulsar "Ver acceso"', async () => {
-    renderPage()
-
-    await screen.findByText('Proxy Pagos Producción')
-
+    // SÍ puede ver Detalle
     fireEvent.click(
-      screen.getByRole('button', { name: 'Ver acceso de Proxy Pagos Producción' }),
+      screen.getByRole('button', { name: 'Ver detalle de Proxy Sentinel' }),
     )
 
     const dialog = await screen.findByRole('dialog')
+    // No debe mostrar la sección de logs para usuarios sin proxies.operar
     expect(
-      within(dialog).getByRole('heading', { name: 'Detalle del acceso' }),
+      within(dialog).queryByText(/últimas 100 líneas de log/i),
+    ).not.toBeInTheDocument()
+    expect(requestProxyLogsMock).not.toHaveBeenCalled()
+  })
+
+  it('permite a Administrador configurar y cambiar la IP global', async () => {
+    updateProxySettingsMock.mockResolvedValue({
+      host: '10.9.3.24',
+      version: 2,
+    })
+
+    renderPage()
+
+    await screen.findByText('10.4.24.18')
+
+    fireEvent.click(screen.getByRole('button', { name: /cambiar ip/i }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(
+      within(dialog).getByText(/esta acción modificará el host publicado de 5 servicios/i),
     ).toBeInTheDocument()
+
+    const input = within(dialog).getByLabelText(/dirección ipv4/i)
+    fireEvent.change(input, { target: { value: '10.9.3.24' } })
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar IP' }))
+
+    await waitFor(() => {
+      expect(updateProxySettingsMock).toHaveBeenCalledWith({
+        host: '10.9.3.24',
+        version: 1,
+      })
+    })
   })
 })

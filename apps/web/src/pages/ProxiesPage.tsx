@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, Copy, Plus } from 'lucide-react'
+import { Check, Copy, Eye, Play, Power, RefreshCw, RotateCcw } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -30,27 +30,25 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { errorMessage } from '@/lib/format'
-import type { Access, AccessEnvironment } from '@/features/accesses/api'
-import { AccessDetailDialog } from '@/features/accesses/AccessDetailDialog'
-import {
-  environmentLabel,
-  formatPortRange,
-} from '@/features/accesses/labels'
 import { useAuth } from '@/features/auth/useAuth'
 import {
   requestProxies,
+  requestStartProxy,
+  type ProxyEnvironment,
+  type ProxyServiceView,
   type ProxySettings,
-  type ProxyView,
+  type ProxyStatus,
 } from '@/features/proxies/api'
 import { GlobalHostCard } from '@/features/proxies/GlobalHostCard'
 import {
-  ENVIRONMENT_OPTIONS,
   formatEndpoint,
-  proxyStatusLabel,
-  STATUS_OPTIONS,
+  PROXY_ENVIRONMENT_OPTIONS,
+  PROXY_STATUS_OPTIONS,
+  proxyEnvironmentLabel,
+  proxyStatusConfig,
 } from '@/features/proxies/labels'
-import { ProxyFormDialog } from '@/features/proxies/ProxyFormDialog'
-import { ProxyStatusDialog } from '@/features/proxies/ProxyStatusDialog'
+import { ProxyActionDialog, type ProxyActionType } from '@/features/proxies/ProxyActionDialog'
+import { ProxyDetailDialog } from '@/features/proxies/ProxyDetailDialog'
 
 const SKELETON_ROWS = [0, 1, 2, 3]
 
@@ -108,39 +106,50 @@ function EndpointCell({ endpoint }: { endpoint: string }) {
 export function ProxiesPage() {
   const { session } = useAuth()
   const permissions = session?.account.permissions ?? []
+  const canOperate = permissions.includes('proxies.operar')
   const canManage = permissions.includes('proxies.gestionar')
 
   const [settings, setSettings] = useState<ProxySettings>({
     host: null,
     version: null,
   })
-  const [proxies, setProxies] = useState<ProxyView[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [services, setServices] = useState<ProxyServiceView[]>([])
+  const [loadedKey, setLoadedKey] = useState<number | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [actionLoadingId, setActionLoadingId] = useState<number | null>(null)
+
+  const loading = loadedKey !== reloadKey
 
   // Filtros
   const [search, setSearch] = useState('')
-  const [environment, setEnvironment] = useState<AccessEnvironment | 'all'>('all')
-  const [status, setStatus] = useState<'all' | 'active' | 'inactive'>('all')
+  const [environment, setEnvironment] = useState<ProxyEnvironment | 'all'>('all')
+  const [status, setStatus] = useState<ProxyStatus | 'all'>('all')
 
-  // Diálogos
-  const [createOpen, setCreateOpen] = useState(false)
-  const [editTarget, setEditTarget] = useState<ProxyView | null>(null)
-  const [statusTarget, setStatusTarget] = useState<{
-    proxy: ProxyView
-    nextActive: boolean
+  // Diálogos: guardar ID seleccionado para que el detalle se actualice automáticamente con el auto-refresh
+  const [selectedServiceId, setSelectedServiceId] = useState<number | null>(null)
+  const detailTarget = useMemo(
+    () => services.find((s) => s.id === selectedServiceId) ?? null,
+    [services, selectedServiceId],
+  )
+
+  const [actionTarget, setActionTarget] = useState<{
+    service: ProxyServiceView
+    action: ProxyActionType
   } | null>(null)
-  const [accessDetailTarget, setAccessDetailTarget] = useState<Access | null>(null)
 
+  // Carga de datos asíncrona sincronizada con reloadKey
   useEffect(() => {
     let active = true
+    const currentKey = reloadKey
 
     requestProxies()
       .then((data) => {
         if (!active) return
         setSettings(data.settings)
-        setProxies(data.proxies)
+        setServices(data.services)
+        setLoadedKey(currentKey)
         setError(null)
       })
       .catch((caught) => {
@@ -148,12 +157,15 @@ export function ProxiesPage() {
         setError(
           errorMessage(
             caught,
-            'No se pudieron cargar los proxies publicados.',
+            'No se pudieron cargar los servicios de proxy.',
           ),
         )
       })
       .finally(() => {
-        if (active) setLoading(false)
+        if (active) {
+          setLoadedKey(currentKey)
+          setRefreshing(false)
+        }
       })
 
     return () => {
@@ -161,10 +173,49 @@ export function ProxiesPage() {
     }
   }, [reloadKey])
 
-  const reload = () => {
-    setError(null)
-    setLoading(true)
+  // Auto-refresh cada 10 s mientras la página está visible
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        setReloadKey((k) => k + 1)
+      }
+    }, 10000)
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        setReloadKey((k) => k + 1)
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [])
+
+  const handleManualRefresh = () => {
+    setRefreshing(true)
     setReloadKey((k) => k + 1)
+  }
+
+  const handleStart = async (service: ProxyServiceView) => {
+    setActionLoadingId(service.id)
+    setError(null)
+    try {
+      await requestStartProxy(service.id)
+      setReloadKey((k) => k + 1)
+    } catch (caught) {
+      setError(
+        errorMessage(
+          caught,
+          `No se pudo iniciar el servicio "${service.name}".`,
+        ),
+      )
+    } finally {
+      setActionLoadingId(null)
+    }
   }
 
   const clearFilters = () => {
@@ -176,53 +227,45 @@ export function ProxiesPage() {
   const hasFilters =
     search.trim() !== '' || environment !== 'all' || status !== 'all'
 
-  const filteredProxies = useMemo(() => {
+  const filteredServices = useMemo(() => {
     const q = search.trim().toLowerCase()
 
-    return proxies
-      .filter((proxy) => {
-        // Filtro estado
-        if (status === 'active' && !proxy.isActive) return false
-        if (status === 'inactive' && proxy.isActive) return false
+    return services.filter((service) => {
+      // Filtro ambiente
+      if (environment !== 'all' && service.environment !== environment) {
+        return false
+      }
 
-        // Filtro ambiente
-        if (
-          environment !== 'all' &&
-          proxy.access.environment !== environment
-        ) {
+      // Filtro estado
+      if (status !== 'all' && service.runtime.status !== status) {
+        return false
+      }
+
+      // Búsqueda
+      if (q !== '') {
+        const matchesName = service.name.toLowerCase().includes(q)
+        const matchesSlug = service.slug.toLowerCase().includes(q)
+        const matchesPort = service.ports.some((p) =>
+          String(p.port).includes(q),
+        )
+        const matchesRoute = service.routes.some(
+          (r) =>
+            r.path.toLowerCase().includes(q) ||
+            r.target.toLowerCase().includes(q) ||
+            (r.detail && r.detail.toLowerCase().includes(q)) ||
+            (r.access &&
+              (r.access.address.toLowerCase().includes(q) ||
+                (r.access.detail && r.access.detail.toLowerCase().includes(q)))),
+        )
+
+        if (!matchesName && !matchesSlug && !matchesPort && !matchesRoute) {
           return false
         }
+      }
 
-        // Búsqueda
-        if (q !== '') {
-          const endpoint = formatEndpoint(settings.host, proxy.port).toLowerCase()
-          const portStr = String(proxy.port)
-          const detail = proxy.detail.toLowerCase()
-          const accessDetail = (proxy.access.detail ?? '').toLowerCase()
-          const accessTarget =
-            `${proxy.access.address}:${formatPortRange(
-              proxy.access.port,
-              proxy.access.portEnd,
-            )}`.toLowerCase()
-
-          const matches =
-            detail.includes(q) ||
-            endpoint.includes(q) ||
-            portStr.includes(q) ||
-            accessDetail.includes(q) ||
-            accessTarget.includes(q)
-
-          if (!matches) return false
-        }
-
-        return true
-      })
-      .sort((a, b) =>
-        a.detail.localeCompare(b.detail, 'es', { sensitivity: 'base' }),
-      )
-  }, [proxies, search, environment, status, settings.host])
-
-  const hostConfigured = Boolean(settings.host)
+      return true
+    })
+  }, [services, search, environment, status])
 
   return (
     <div className="space-y-6">
@@ -230,49 +273,42 @@ export function ProxiesPage() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Proxies</h1>
           <p className="text-sm text-muted-foreground">
-            Catálogo de accesos publicados mediante reverse proxy.
+            Catálogo y control de servicios de proxy operables.
           </p>
         </div>
-        {canManage ? (
-          <Button
-            onClick={() => setCreateOpen(true)}
-            disabled={!hostConfigured}
-            title={
-              !hostConfigured
-                ? 'Configura primero la IP global del puente'
-                : undefined
-            }
-          >
-            <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            Nuevo proxy
-          </Button>
-        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleManualRefresh}
+          disabled={loading || refreshing}
+          aria-label="Actualizar servicios"
+        >
+          <RefreshCw
+            className={`mr-1.5 h-3.5 w-3.5 ${
+              refreshing ? 'animate-spin' : ''
+            }`}
+            aria-hidden="true"
+          />
+          <span>Actualizar</span>
+        </Button>
       </div>
-
-      {!hostConfigured && !loading ? (
-        <Alert className="border-warning/50 bg-warning/5 text-foreground">
-          <AlertDescription className="text-xs">
-            No se ha configurado la IP global del puente. Debes configurarla para
-            poder publicar nuevos proxies.
-          </AlertDescription>
-        </Alert>
-      ) : null}
 
       <GlobalHostCard
         settings={settings}
-        totalEndpoints={proxies.length}
+        totalServices={services.length}
         canManage={canManage}
-        onSaved={reload}
+        onSaved={() => setReloadKey((k) => k + 1)}
       />
 
       <Card>
         <CardHeader className="border-b">
-          <CardTitle>Proxies publicados</CardTitle>
+          <CardTitle>Servicios de proxy</CardTitle>
           <CardDescription>
-            Endpoints publicados en el reverse proxy.
+            Servicios configurados y estado de ejecución en el host.
           </CardDescription>
           <CardAction>
-            {error ? null : loading ? (
+            {error ? null : loading && services.length === 0 ? (
               <span
                 role="status"
                 className="text-xs text-muted-foreground tabular-nums"
@@ -281,8 +317,8 @@ export function ProxiesPage() {
               </span>
             ) : (
               <span className="text-sm text-muted-foreground tabular-nums">
-                {filteredProxies.length}{' '}
-                {filteredProxies.length === 1 ? 'proxy' : 'proxies'}
+                {filteredServices.length}{' '}
+                {filteredServices.length === 1 ? 'servicio' : 'servicios'}
               </span>
             )}
           </CardAction>
@@ -299,7 +335,7 @@ export function ProxiesPage() {
                 spellCheck={false}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por detalle, endpoint o acceso"
+                placeholder="Buscar por nombre, ruta, destino o puerto"
                 autoComplete="off"
               />
             </div>
@@ -307,11 +343,11 @@ export function ProxiesPage() {
             <div className="w-full sm:w-48 space-y-1.5">
               <Label htmlFor="proxy-filter-environment">Ambiente</Label>
               <Select
-                items={ENVIRONMENT_OPTIONS}
+                items={PROXY_ENVIRONMENT_OPTIONS}
                 value={environment}
                 onValueChange={(val) => {
                   if (val !== null) {
-                    setEnvironment(val as AccessEnvironment | 'all')
+                    setEnvironment(val as ProxyEnvironment | 'all')
                   }
                 }}
               >
@@ -323,7 +359,7 @@ export function ProxiesPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {ENVIRONMENT_OPTIONS.map((item) => (
+                  {PROXY_ENVIRONMENT_OPTIONS.map((item) => (
                     <SelectItem key={item.value} value={item.value}>
                       {item.label}
                     </SelectItem>
@@ -335,11 +371,11 @@ export function ProxiesPage() {
             <div className="w-full sm:w-44 space-y-1.5">
               <Label htmlFor="proxy-filter-status">Estado</Label>
               <Select
-                items={STATUS_OPTIONS}
+                items={PROXY_STATUS_OPTIONS}
                 value={status}
                 onValueChange={(val) => {
                   if (val !== null) {
-                    setStatus(val as 'all' | 'active' | 'inactive')
+                    setStatus(val as ProxyStatus | 'all')
                   }
                 }}
               >
@@ -351,7 +387,7 @@ export function ProxiesPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {STATUS_OPTIONS.map((item) => (
+                  {PROXY_STATUS_OPTIONS.map((item) => (
                     <SelectItem key={item.value} value={item.value}>
                       {item.label}
                     </SelectItem>
@@ -363,7 +399,7 @@ export function ProxiesPage() {
 
           {error ? (
             <Alert variant="destructive">
-              <AlertTitle>No se pudieron cargar los proxies</AlertTitle>
+              <AlertTitle>No se pudieron cargar los servicios</AlertTitle>
               <AlertDescription>
                 <p>{error}</p>
                 <Button
@@ -371,21 +407,21 @@ export function ProxiesPage() {
                   variant="outline"
                   size="sm"
                   className="mt-2"
-                  onClick={reload}
+                  onClick={() => setReloadKey((k) => k + 1)}
                 >
                   Reintentar
                 </Button>
               </AlertDescription>
             </Alert>
-          ) : loading && proxies.length === 0 ? (
+          ) : loading && services.length === 0 ? (
             <div role="status">
-              <span className="sr-only">Cargando proxies…</span>
+              <span className="sr-only">Cargando servicios de proxy…</span>
               <Table aria-hidden="true">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Detalle</TableHead>
-                    <TableHead>Endpoint</TableHead>
-                    <TableHead>Acceso</TableHead>
+                    <TableHead>Nombre</TableHead>
+                    <TableHead>Endpoints</TableHead>
+                    <TableHead>Rutas</TableHead>
                     <TableHead>Ambiente</TableHead>
                     <TableHead>Estado</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
@@ -395,37 +431,37 @@ export function ProxiesPage() {
                   {SKELETON_ROWS.map((row) => (
                     <TableRow key={row}>
                       <TableCell>
-                        <Skeleton className="h-4 w-32" />
-                      </TableCell>
-                      <TableCell>
                         <Skeleton className="h-4 w-28" />
                       </TableCell>
                       <TableCell>
-                        <Skeleton className="h-4 w-36" />
+                        <Skeleton className="h-4 w-32" />
                       </TableCell>
                       <TableCell>
-                        <Skeleton className="h-4 w-20" />
+                        <Skeleton className="h-4 w-40" />
                       </TableCell>
                       <TableCell>
                         <Skeleton className="h-4 w-16" />
                       </TableCell>
                       <TableCell>
-                        <Skeleton className="ml-auto h-4 w-32" />
+                        <Skeleton className="h-4 w-20" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="ml-auto h-4 w-24" />
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </div>
-          ) : filteredProxies.length === 0 ? (
+          ) : filteredServices.length === 0 ? (
             <div className="border border-dashed border-border px-4 py-8 text-center">
               <p className="text-sm font-medium">
-                {hasFilters ? 'Sin resultados' : 'Sin proxies'}
+                {hasFilters ? 'Sin resultados' : 'Sin servicios de proxy'}
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
                 {hasFilters
-                  ? 'No hay proxies que coincidan con la búsqueda y los filtros.'
-                  : 'Todavía no hay proxies publicados en el catálogo.'}
+                  ? 'No hay servicios que coincidan con la búsqueda y los filtros.'
+                  : 'Todavía no hay servicios de proxy registrados en el catálogo.'}
               </p>
               {hasFilters ? (
                 <Button
@@ -437,135 +473,248 @@ export function ProxiesPage() {
                 >
                   Limpiar filtros
                 </Button>
-              ) : canManage && hostConfigured ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  className="mt-3"
-                  onClick={() => setCreateOpen(true)}
-                >
-                  <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                  Nuevo proxy
-                </Button>
               ) : null}
             </div>
           ) : (
-            <Table aria-label="Catálogo de proxies publicados">
+            <Table aria-label="Catálogo de servicios de proxy">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Detalle</TableHead>
-                  <TableHead>Endpoint</TableHead>
-                  <TableHead>Acceso</TableHead>
+                  <TableHead>Nombre</TableHead>
+                  <TableHead>Endpoints</TableHead>
+                  <TableHead>Rutas</TableHead>
                   <TableHead>Ambiente</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredProxies.map((proxy) => {
-                  const endpoint = formatEndpoint(settings.host, proxy.port)
-                  const accessTarget = `${proxy.access.address}:${formatPortRange(
-                    proxy.access.port,
-                    proxy.access.portEnd,
-                  )}`
+                {filteredServices.map((service) => {
+                  const statusCfg = proxyStatusConfig(service.runtime.status)
+                  const isBusy = actionLoadingId === service.id
+                  const status = service.runtime.status
+                  const hasPid = service.runtime.pid !== null
+                  const isConflict = status === 'conflict'
+
+                  // Reglas de acciones:
+                  // Iniciar: disponible en stopped o error
+                  const canStart = status === 'stopped' || status === 'error'
+                  // Detener: si tiene PID o error o active/starting, excepto en conflict (procesos ajenos)
+                  const canStop =
+                    !isConflict &&
+                    (status === 'active' ||
+                      status === 'starting' ||
+                      status === 'error' ||
+                      hasPid)
+                  // Reiniciar: si está activo, error o tiene PID, excepto en conflict
+                  const canRestart =
+                    !isConflict &&
+                    (status === 'active' || status === 'error' || hasPid)
 
                   return (
-                    <TableRow key={proxy.id}>
-                      <TableCell className="font-medium">
-                        <div
-                          className="max-w-[16rem] truncate"
-                          title={proxy.detail}
-                        >
-                          {proxy.detail}
-                        </div>
-                      </TableCell>
-
-                      <TableCell>
-                        <EndpointCell endpoint={endpoint} />
-                      </TableCell>
-
-                      <TableCell>
+                    <TableRow key={service.id}>
+                      {/* 1. Nombre */}
+                      <TableCell className="font-medium align-top">
                         <div className="space-y-0.5">
                           <div className="flex items-center gap-1.5">
-                            <span
-                              className="font-medium text-foreground text-xs"
-                              title={proxy.access.detail ?? accessTarget}
-                            >
-                              {proxy.access.detail ?? proxy.access.address}
+                            <span className="font-semibold text-foreground">
+                              {service.name}
                             </span>
-                            {!proxy.access.isActive ? (
+                            {!service.isActive ? (
                               <Badge
                                 variant="outline"
-                                className="border-warning text-warning text-[10px] leading-tight px-1 py-0"
+                                className="text-muted-foreground text-[10px] leading-tight px-1 py-0"
                               >
-                                Acceso inactivo
+                                Inactivo
                               </Badge>
                             ) : null}
                           </div>
-                          <p className="font-mono text-xs text-muted-foreground tabular-nums">
-                            {accessTarget}
+                          <p className="font-mono text-xs text-muted-foreground">
+                            {service.slug}
                           </p>
                         </div>
                       </TableCell>
 
-                      <TableCell>
-                        {environmentLabel(proxy.access.environment)}
+                      {/* 2. Endpoints */}
+                      <TableCell className="align-top">
+                        <div className="space-y-1">
+                          {service.ports.length === 0 ? (
+                            <span className="text-xs text-muted-foreground">
+                              Sin puertos
+                            </span>
+                          ) : (
+                            service.ports.map((p) => {
+                              const endpoint = formatEndpoint(
+                                settings.host,
+                                p.port,
+                              )
+                              return (
+                                <EndpointCell
+                                  key={p.port}
+                                  endpoint={endpoint}
+                                />
+                              )
+                            })
+                          )}
+                        </div>
                       </TableCell>
 
-                      <TableCell>
-                        <Badge
-                          variant={proxy.isActive ? 'success' : 'outline'}
-                          className={
-                            proxy.isActive ? undefined : 'text-muted-foreground'
-                          }
-                        >
-                          {proxyStatusLabel(proxy.isActive)}
-                        </Badge>
+                      {/* 3. Rutas */}
+                      <TableCell className="align-top">
+                        <div className="space-y-2">
+                          {service.routes.length === 0 ? (
+                            <span className="text-xs text-muted-foreground">
+                              Sin rutas
+                            </span>
+                          ) : (
+                            service.routes.map((r) => (
+                              <div
+                                key={r.id}
+                                className="space-y-0.5 border-b border-border/40 pb-1.5 last:border-b-0 last:pb-0"
+                              >
+                                <div className="flex flex-wrap items-center gap-1 text-xs font-mono">
+                                  <span className="font-semibold text-foreground">
+                                    {r.path}
+                                  </span>
+                                  <span className="text-muted-foreground">
+                                    &rarr;
+                                  </span>
+                                  <span className="text-muted-foreground break-all">
+                                    {r.target}
+                                  </span>
+                                </div>
+                                <div className="text-[11px]">
+                                  {r.access ? (
+                                    <div className="flex items-center gap-1 text-foreground">
+                                      <span
+                                        title={
+                                          r.access.detail ?? r.access.address
+                                        }
+                                      >
+                                        {r.access.detail ?? r.access.address} (
+                                        <span className="font-mono tabular-nums">
+                                          {r.access.address}:{r.access.port}
+                                        </span>
+                                        )
+                                      </span>
+                                      {!r.access.isActive ? (
+                                        <Badge
+                                          variant="outline"
+                                          className="text-muted-foreground text-[9px] py-0 px-1"
+                                        >
+                                          Acceso inactivo
+                                        </Badge>
+                                      ) : null}
+                                    </div>
+                                  ) : (
+                                    <span className="text-muted-foreground">
+                                      Sin acceso en el catálogo
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
                       </TableCell>
 
-                      <TableCell>
+                      {/* 4. Ambiente */}
+                      <TableCell className="align-top">
+                        <span className="text-sm">
+                          {proxyEnvironmentLabel(service.environment)}
+                        </span>
+                      </TableCell>
+
+                      {/* 5. Estado */}
+                      <TableCell className="align-top">
+                        <div className="space-y-1">
+                          <Badge
+                            variant={statusCfg.variant}
+                            className={statusCfg.className}
+                          >
+                            {statusCfg.label}
+                          </Badge>
+                          {service.runtime.detail ? (
+                            <p
+                              className="text-[11px] text-muted-foreground max-w-[12rem] truncate"
+                              title={service.runtime.detail}
+                            >
+                              {service.runtime.detail}
+                            </p>
+                          ) : null}
+                        </div>
+                      </TableCell>
+
+                      {/* 6. Acciones */}
+                      <TableCell className="text-right align-top">
                         <div className="flex flex-wrap justify-end gap-1">
                           <Button
                             type="button"
                             variant="ghost"
                             size="xs"
-                            onClick={() => setAccessDetailTarget(proxy.access)}
-                            aria-label={`Ver acceso de ${proxy.detail}`}
-                            title="Ver acceso de firewall vinculado"
+                            onClick={() => setSelectedServiceId(service.id)}
+                            aria-label={`Ver detalle de ${service.name}`}
+                            title="Ver detalle del servicio y logs"
                           >
-                            Ver acceso
+                            <Eye className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                            <span>Detalle</span>
                           </Button>
 
-                          {canManage ? (
+                          {canOperate ? (
                             <>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="xs"
-                                onClick={() => setEditTarget(proxy)}
-                                aria-label={`Editar proxy ${proxy.detail}`}
-                              >
-                                Editar
-                              </Button>
+                              {/* Iniciar */}
+                              {canStart ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="xs"
+                                  disabled={isBusy}
+                                  onClick={() => handleStart(service)}
+                                  aria-label={`Iniciar servicio ${service.name}`}
+                                >
+                                  <Play className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                                  <span>{isBusy ? 'Iniciando…' : 'Iniciar'}</span>
+                                </Button>
+                              ) : null}
 
-                              <Button
-                                type="button"
-                                variant={
-                                  proxy.isActive ? 'destructive' : 'outline'
-                                }
-                                size="xs"
-                                onClick={() =>
-                                  setStatusTarget({
-                                    proxy,
-                                    nextActive: !proxy.isActive,
-                                  })
-                                }
-                                aria-label={`${
-                                  proxy.isActive ? 'Desactivar' : 'Reactivar'
-                                } proxy ${proxy.detail}`}
-                              >
-                                {proxy.isActive ? 'Desactivar' : 'Reactivar'}
-                              </Button>
+                              {/* Detener */}
+                              {canStop ? (
+                                <Button
+                                  type="button"
+                                  variant="destructive"
+                                  size="xs"
+                                  disabled={isBusy}
+                                  onClick={() =>
+                                    setActionTarget({
+                                      service,
+                                      action: 'stop',
+                                    })
+                                  }
+                                  aria-label={`Detener servicio ${service.name}`}
+                                >
+                                  <Power className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                                  <span>Detener</span>
+                                </Button>
+                              ) : null}
+
+                              {/* Reiniciar */}
+                              {canRestart ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="xs"
+                                  disabled={isBusy}
+                                  onClick={() =>
+                                    setActionTarget({
+                                      service,
+                                      action: 'restart',
+                                    })
+                                  }
+                                  aria-label={`Reiniciar servicio ${service.name}`}
+                                >
+                                  <RotateCcw className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                                  <span>Reiniciar</span>
+                                </Button>
+                              ) : null}
                             </>
                           ) : null}
                         </div>
@@ -579,41 +728,23 @@ export function ProxiesPage() {
         </CardContent>
       </Card>
 
-      {createOpen ? (
-        <ProxyFormDialog
-          mode="create"
-          currentHost={settings.host}
-          open
-          onOpenChange={(open) => !open && setCreateOpen(false)}
-          onSaved={reload}
-        />
-      ) : null}
-
-      {editTarget ? (
-        <ProxyFormDialog
-          mode="edit"
-          proxy={editTarget}
-          currentHost={settings.host}
-          open
-          onOpenChange={(open) => !open && setEditTarget(null)}
-          onSaved={reload}
-        />
-      ) : null}
-
-      {statusTarget ? (
-        <ProxyStatusDialog
-          proxy={statusTarget.proxy}
+      {/* Diálogo de Detalle y Logs */}
+      {detailTarget ? (
+        <ProxyDetailDialog
+          service={detailTarget}
           host={settings.host}
-          nextActive={statusTarget.nextActive}
-          onClose={() => setStatusTarget(null)}
-          onSaved={reload}
+          canOperate={canOperate}
+          onClose={() => setSelectedServiceId(null)}
         />
       ) : null}
 
-      {accessDetailTarget ? (
-        <AccessDetailDialog
-          access={accessDetailTarget}
-          onClose={() => setAccessDetailTarget(null)}
+      {/* Diálogo de Confirmación para Detener / Reiniciar */}
+      {actionTarget ? (
+        <ProxyActionDialog
+          service={actionTarget.service}
+          action={actionTarget.action}
+          onClose={() => setActionTarget(null)}
+          onSuccess={() => setReloadKey((k) => k + 1)}
         />
       ) : null}
     </div>

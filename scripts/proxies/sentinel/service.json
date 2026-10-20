@@ -1,0 +1,21 @@
+{
+  "name": "Proxy Sentinel",
+  "environment": "qa",
+  "entry": "server.js",
+  "ports": [3500],
+  "primaryPort": 3500,
+  "healthPath": "/bridge-health",
+  "routes": [
+    {
+      "path": "/realms",
+      "target": "http://10.5.81.60:8080",
+      "detail": "Keycloak",
+      "access": { "address": "10.5.81.60", "port": 8080 }
+    },
+    {
+      "path": "/customer-credit-rating-s",
+      "target": "http://apps-test.losandes.pe",
+      "detail": "Apps Test"
+    }
+  ]
+}

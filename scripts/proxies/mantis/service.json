@@ -1,0 +1,16 @@
+{
+  "name": "Mantis BT",
+  "environment": "qa",
+  "entry": "proxy.js",
+  "ports": [80, 8080],
+  "primaryPort": 80,
+  "healthPath": null,
+  "routes": [
+    {
+      "path": "/",
+      "target": "http://10.20.22.50:80",
+      "detail": "Mantis",
+      "access": { "address": "10.20.22.50", "port": 80 }
+    }
+  ]
+}

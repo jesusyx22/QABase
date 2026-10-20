@@ -1,29 +1,36 @@
 import type {
-  CreateProxyInput,
+  ProxyEnvironment,
+  ProxyHealth,
   ProxyListResponse,
+  ProxyLogsResponse,
+  ProxyPort,
+  ProxyRoute,
+  ProxyRouteAccess,
+  ProxyRuntime,
+  ProxyServiceView,
   ProxySettings,
-  ProxyView,
-  UpdateProxyInput,
+  ProxyStatus,
   UpdateProxySettingsInput,
 } from '@qabase/shared'
 import { apiFetch } from '@/lib/api'
-import type { Access } from '@/features/accesses/api'
 
 export type {
-  CreateProxyInput,
+  ProxyEnvironment,
+  ProxyHealth,
   ProxyListResponse,
+  ProxyLogsResponse,
+  ProxyPort,
+  ProxyRoute,
+  ProxyRouteAccess,
+  ProxyRuntime,
+  ProxyServiceView,
   ProxySettings,
-  ProxyView,
-  UpdateProxyInput,
+  ProxyStatus,
   UpdateProxySettingsInput,
-} from '@qabase/shared'
+}
 
 export function requestProxies(): Promise<ProxyListResponse> {
   return apiFetch<ProxyListResponse>('/api/proxies')
-}
-
-export function requestAccessOptions(): Promise<Access[]> {
-  return apiFetch<Access[]>('/api/proxies/access-options')
 }
 
 export function updateProxySettings(
@@ -35,19 +42,35 @@ export function updateProxySettings(
   })
 }
 
-export function createProxy(input: CreateProxyInput): Promise<ProxyView> {
-  return apiFetch<ProxyView>('/api/proxies', {
+export function requestStartProxy(id: number): Promise<ProxyServiceView> {
+  return apiFetch<ProxyServiceView>(`/api/proxies/${id}/start`, {
     method: 'POST',
-    body: JSON.stringify(input),
   })
 }
 
-export function updateProxy(
+export function requestStopProxy(
   id: number,
-  changes: UpdateProxyInput,
-): Promise<ProxyView> {
-  return apiFetch<ProxyView>(`/api/proxies/${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify(changes),
+  confirmExternal = false,
+): Promise<ProxyServiceView> {
+  return apiFetch<ProxyServiceView>(`/api/proxies/${id}/stop`, {
+    method: 'POST',
+    body: JSON.stringify({ confirmExternal }),
   })
+}
+
+export function requestRestartProxy(
+  id: number,
+  confirmExternal = false,
+): Promise<ProxyServiceView> {
+  return apiFetch<ProxyServiceView>(`/api/proxies/${id}/restart`, {
+    method: 'POST',
+    body: JSON.stringify({ confirmExternal }),
+  })
+}
+
+export function requestProxyLogs(
+  id: number,
+  lines = 100,
+): Promise<ProxyLogsResponse> {
+  return apiFetch<ProxyLogsResponse>(`/api/proxies/${id}/logs?lines=${lines}`)
 }

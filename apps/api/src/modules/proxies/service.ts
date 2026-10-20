@@ -1,133 +1,609 @@
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import type {
-  CreateProxyInput,
   ProxyListResponse,
+  ProxyLogsResponse,
+  ProxyRoute,
+  ProxyServiceView,
   ProxySettings,
-  ProxyView,
-  UpdateProxyInput,
   UpdateProxySettingsInput,
 } from '@qabase/shared'
 import type { DatabaseSync } from 'node:sqlite'
 import { insertAuditEvent } from '../../core/audit'
-import { conflict, invalidInput, notFound } from '../../core/errors'
+import { conflict, notFound } from '../../core/errors'
 import { inTransaction } from '../../core/transaction'
-import { getAccessView, type AccessView } from '../accesses/service'
 import type { Actor } from '../identity/actor'
 import {
-  availableAccessIds,
-  findProxy,
+  findRouteAccess,
+  findRuntime,
+  findService,
   findSettings,
-  insertProxy,
-  listProxyRows,
+  listPortRows,
+  listRouteRows,
+  listRuntimeRows,
+  listServiceRows,
+  saveRuntime,
   saveSettings,
-  updateProxyRow,
-  type ProxyRow,
+  type RuntimeRow,
+  type ServiceRow,
 } from './repository'
 import {
-  validateDetail,
-  validateEntityId,
-  validateHost,
-  validatePort,
-  validateVersion,
-} from './validation'
+  createSystemProcessInspector,
+  defaultHealthCheck,
+  inspectService,
+  type PortListener,
+  type ProcessInspector,
+} from './process'
+import {
+  createSystemProcessController,
+  logPathFor,
+  readLogTail,
+  type ProxyProcessController,
+} from './control'
+import { validateHost, validateVersion } from './validation'
 
 export function getProxySettings(db: DatabaseSync): ProxySettings {
   return findSettings(db) ?? { host: null, version: null }
 }
-function audit(db: DatabaseSync, actor: Actor, action: string, entityType: string, id: number, now: Date, before: unknown, after: unknown): void {
-  insertAuditEvent(db, { actorAccountId: actor.id, actorUsername: actor.username, channel: 'app', module: 'proxies', entityType, entityId: String(id), action, before, after }, now.toISOString())
+
+function audit(
+  db: DatabaseSync,
+  actor: Actor,
+  action: string,
+  entityType: string,
+  id: number,
+  now: Date,
+  before: unknown,
+  after: unknown,
+): void {
+  insertAuditEvent(
+    db,
+    {
+      actorAccountId: actor.id,
+      actorUsername: actor.username,
+      channel: 'app',
+      module: 'proxies',
+      entityType,
+      entityId: String(id),
+      action,
+      before,
+      after,
+    },
+    now.toISOString(),
+  )
 }
-export function updateProxySettings(db: DatabaseSync, actor: Actor, input: UpdateProxySettingsInput & { now: Date }): ProxySettings {
+
+export function updateProxySettings(
+  db: DatabaseSync,
+  actor: Actor,
+  input: UpdateProxySettingsInput & { now: Date },
+): ProxySettings {
   const host = validateHost(input.host)
-  if (input.version !== undefined) validateVersion(input.version)
+  if (input.version !== undefined) {
+    validateVersion(input.version)
+  }
   return inTransaction(db, () => {
     const before = getProxySettings(db)
-    if (!saveSettings(db, host, input.version, input.now.toISOString())) throw conflict()
+    if (!saveSettings(db, host, input.version, input.now.toISOString())) {
+      throw conflict()
+    }
     const after = getProxySettings(db)
-    audit(db, actor, 'proxy.settings_updated', 'proxy_settings', 1, input.now, before, after)
+    audit(
+      db,
+      actor,
+      'proxy.settings_updated',
+      'proxy_settings',
+      1,
+      input.now,
+      before,
+      after,
+    )
     return after
   })
 }
 
-function toView(db: DatabaseSync, row: ProxyRow): ProxyView {
-  const { accessId, isActive, ...fields } = row
-  return { ...fields, isActive: isActive === 1, access: getAccessView(db, accessId) }
-}
-export function listProxies(db: DatabaseSync): ProxyListResponse {
-  return { settings: getProxySettings(db), proxies: listProxyRows(db).map(row => toView(db, row)) }
-}
-export function listAccessOptions(db: DatabaseSync): AccessView[] {
-  return availableAccessIds(db).map(id => getAccessView(db, id))
+function mapRoute(
+  db: DatabaseSync,
+  route: ReturnType<typeof listRouteRows>[number],
+): ProxyRoute {
+  const access = route.accessId ? findRouteAccess(db, route.accessId) : undefined
+  return {
+    id: route.id,
+    path: route.path,
+    target: route.target,
+    detail: route.detail,
+    access: access
+      ? {
+          id: access.id,
+          address: access.address,
+          port: access.port,
+          portEnd: access.portEnd,
+          environment: access.environment,
+          detail: access.detail,
+          isActive: access.isActive === 1,
+        }
+      : null,
+  }
 }
 
-function activeAccess(db: DatabaseSync, id: number): void {
-  const access = getAccessView(db, validateEntityId(id, 'Acceso'))
-  if (!access.isActive) throw conflict('El acceso está inactivo y no admite nuevos vínculos.')
+export type ListProxiesOptions = {
+  inspector?: ProcessInspector
+  healthCheck?: (port: number, path: string) => Promise<boolean>
+  now?: Date
 }
-function uniquenessError(error: unknown): never {
-  const message = String(error)
-  if (message.includes('UNIQUE constraint failed: proxies.access_id')) throw conflict('El acceso ya tiene un proxy.')
-  if (message.includes('UNIQUE constraint failed: proxies.port')) throw conflict('El puerto ya está reservado.')
-  if (message.includes('UNIQUE constraint failed: proxies.detail_normalized')) throw conflict('El detalle ya existe.')
-  throw error
-}
-export function createProxy(db: DatabaseSync, actor: Actor, input: CreateProxyInput & { now: Date }): ProxyView {
-  const port = validatePort(input.port)
-  const detail = validateDetail(input.detail)
-  try {
-    return inTransaction(db, () => {
-      if (!findSettings(db)) throw conflict('Configura la IP global antes de crear un proxy.')
-      activeAccess(db, input.accessId)
-      const id = insertProxy(db, { accessId: input.accessId, port, detail, now: input.now.toISOString() })
-      const view = toView(db, findProxy(db, id)!)
-      audit(db, actor, 'proxy.created', 'proxy', id, input.now, undefined, view)
-      return view
+
+export async function listProxies(
+  db: DatabaseSync,
+  options: ListProxiesOptions = {},
+): Promise<ProxyListResponse> {
+  const settings = getProxySettings(db)
+  const services = listServiceRows(db)
+  const ports = listPortRows(db)
+  const routes = listRouteRows(db)
+  const runtimes = new Map(
+    listRuntimeRows(db).map((row) => [row.serviceId, row] as const),
+  )
+  const inspector = options.inspector ?? createSystemProcessInspector()
+  const healthCheck = options.healthCheck ?? defaultHealthCheck
+  const now = options.now ?? new Date()
+  const allPorts = [...new Set(ports.map((row) => row.port))]
+  const listeners = await inspector.listListeners(allPorts)
+  const listening = new Set(listeners.map((listener) => listener.port))
+  const alive = new Map<number, boolean>()
+  for (const [serviceId, runtime] of runtimes) {
+    if (runtime.pid) {
+      alive.set(serviceId, await inspector.isProcessAlive(runtime.pid))
+    }
+  }
+
+  const views: ProxyServiceView[] = []
+  for (const service of services) {
+    const servicePorts = ports
+      .filter((row) => row.serviceId === service.id)
+      .map((row) => ({
+        port: row.port,
+        isPrimary: row.isPrimary === 1,
+        listening: listening.has(row.port),
+      }))
+    const runtime: RuntimeRow | undefined = runtimes.get(service.id)
+    const serviceRuntime = await inspectService({
+      service,
+      ports: ports.filter((row) => row.serviceId === service.id),
+      runtime,
+      listeners,
+      alive: alive.get(service.id) ?? false,
+      now,
+      healthCheck,
     })
-  } catch (error) { return uniquenessError(error) }
+    views.push({
+      id: service.id,
+      slug: service.slug,
+      name: service.name,
+      environment: service.environment,
+      healthPath: service.healthPath,
+      isActive: service.isActive === 1,
+      routes: routes
+        .filter((route) => route.serviceId === service.id)
+        .map((route) => mapRoute(db, route)),
+      ports: servicePorts,
+      runtime: serviceRuntime,
+      createdAt: service.createdAt,
+      updatedAt: service.updatedAt,
+    })
+  }
+
+  return { settings, services: views }
 }
-export function updateProxy(db: DatabaseSync, actor: Actor, id: number, input: UpdateProxyInput & { now: Date }): ProxyView {
-  validateEntityId(id, 'Proxy')
-  validateVersion(input.version)
+
+export function requireService(db: DatabaseSync, id: number) {
+  const service = findService(db, id)
+  if (!service) {
+    throw notFound('El servicio de proxy no existe.')
+  }
+  return service
+}
+
+export type ProxyControlOptions = {
+  proxiesPath: string
+  logsPath: string
+  inspector: ProcessInspector
+  controller: ProxyProcessController
+  healthCheck?: (port: number, path: string) => Promise<boolean>
+  now: Date
+}
+
+const serviceLocks = new Map<number, Promise<unknown>>()
+
+/**
+ * Serializa iniciar/detener/reiniciar por servicio. Sin esto, dos peticiones
+ * simultáneas pueden lanzar dos procesos o pisar el PID guardado.
+ */
+async function withServiceLock<T>(
+  id: number,
+  work: () => Promise<T>,
+): Promise<T> {
+  const previous = serviceLocks.get(id) ?? Promise.resolve()
+  const run = previous.then(work, work)
+  serviceLocks.set(
+    id,
+    run.then(
+      () => undefined,
+      () => undefined,
+    ),
+  )
+  return run
+}
+
+function isNodeListener(listener: PortListener): boolean {
+  return /^node(\.exe)?$/i.test(listener.processName)
+}
+
+function isManagedCommand(
+  service: ServiceRow,
+  commandLine: string,
+): boolean {
+  const marker = `scripts/proxies/${service.slug}/${service.entry}`
+  return commandLine.replaceAll('\\', '/').includes(marker)
+}
+
+async function serviceView(
+  db: DatabaseSync,
+  id: number,
+  options: ProxyControlOptions,
+): Promise<ProxyServiceView> {
+  const response = await listProxies(db, {
+    inspector: options.inspector,
+    healthCheck: options.healthCheck,
+    now: options.now,
+  })
+  const service = response.services.find((item) => item.id === id)
+  if (!service) {
+    throw notFound('El servicio de proxy no existe.')
+  }
+  return service
+}
+
+function servicePorts(db: DatabaseSync, serviceId: number) {
+  return listPortRows(db).filter((row) => row.serviceId === serviceId)
+}
+
+function markRuntimeError(
+  db: DatabaseSync,
+  actor: Actor,
+  id: number,
+  options: ProxyControlOptions,
+  message: string,
+): void {
+  inTransaction(db, () => {
+    saveRuntime(
+      db,
+      id,
+      {
+        pid: null,
+        startedAt: null,
+        startedByQabase: false,
+        lastExitCode: null,
+        lastError: message,
+      },
+      options.now.toISOString(),
+    )
+    audit(db, actor, 'proxy.start_failed', 'proxy', id, options.now, undefined, {
+      error: message,
+    })
+  })
+}
+
+function markStopError(
+  db: DatabaseSync,
+  actor: Actor,
+  id: number,
+  options: ProxyControlOptions,
+  message: string,
+  runtime: RuntimeRow | undefined,
+): void {
+  inTransaction(db, () => {
+    saveRuntime(
+      db,
+      id,
+      {
+        pid: runtime?.pid ?? null,
+        startedAt: runtime?.startedAt ?? null,
+        startedByQabase: runtime?.startedByQabase === 1,
+        lastExitCode: null,
+        lastError: message,
+      },
+      options.now.toISOString(),
+    )
+    audit(db, actor, 'proxy.stop_failed', 'proxy', id, options.now, undefined, {
+      error: message,
+    })
+  })
+}
+
+async function startProxyUnlocked(
+  db: DatabaseSync,
+  actor: Actor,
+  id: number,
+  options: ProxyControlOptions,
+): Promise<ProxyServiceView> {
+  const service = requireService(db, id)
+  if (service.isActive !== 1) {
+    throw conflict('El servicio está desactivado.')
+  }
+  const ports = servicePorts(db, id)
+  if (ports.length === 0) {
+    throw conflict('El servicio no tiene puertos configurados.')
+  }
+  const listeners = await options.inspector.listListeners(
+    ports.map((row) => row.port),
+  )
+  if (listeners.length > 0) {
+    const node = listeners.find(isNodeListener)
+    if (node) {
+      throw conflict('El servicio ya está activo.')
+    }
+    const blocker = listeners[0]!
+    throw conflict(
+      `El puerto ${blocker.port} está ocupado por ${
+        blocker.processName || 'otro proceso'
+      }.`,
+    )
+  }
+
+  const runtime = findRuntime(db, id)
+  if (
+    runtime?.pid &&
+    runtime.startedByQabase === 1 &&
+    (await options.inspector.isProcessAlive(runtime.pid))
+  ) {
+    const info = await options.inspector.describeProcess(runtime.pid)
+    if (info && isManagedCommand(service, info.commandLine)) {
+      throw conflict(
+        'El proceso sigue vivo aunque aún no escuche. Deténlo antes de iniciar otro.',
+      )
+    }
+  }
+
+  const serviceDir = join(options.proxiesPath, service.slug)
+  const entryPath = join(serviceDir, service.entry)
+  if (!existsSync(entryPath)) {
+    throw notFound(`No existe ${service.slug}/${service.entry}.`)
+  }
+  const primaryPort =
+    ports.find((row) => row.isPrimary === 1)?.port ?? ports[0]!.port
+  let pid: number
   try {
-    return inTransaction(db, () => {
-      const existing = findProxy(db, id)
-      if (!existing) throw notFound('El proxy no existe.')
-      if (existing.version !== input.version) throw conflict()
-      if (input.accessId !== undefined && input.accessId !== existing.accessId) activeAccess(db, input.accessId)
-      if (input.isActive !== undefined && typeof input.isActive !== 'boolean') throw invalidInput('El estado no es válido.')
-      if (input.accessId === undefined && input.port === undefined && input.detail === undefined && input.isActive === undefined) throw invalidInput('No hay cambios para guardar.')
+    const started = await options.controller.start({
+      serviceDir,
+      entry: service.entry,
+      ports: ports.map((row) => row.port),
+      primaryPort,
+      logFile: logPathFor(options.logsPath, service.slug),
+    })
+    pid = started.pid
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'No se pudo iniciar el proceso.'
+    markRuntimeError(db, actor, id, options, message)
+    throw conflict('No se pudo iniciar el servicio.')
+  }
 
-      const nextAccessId = input.accessId ?? existing.accessId
-      const nextPort = input.port === undefined ? existing.port : validatePort(input.port)
-      const nextDetail = input.detail === undefined ? existing.detail : validateDetail(input.detail)
-      const nextActive = input.isActive ?? (existing.isActive === 1)
-      const fieldsChanged =
-        nextAccessId !== existing.accessId ||
-        nextPort !== existing.port ||
-        nextDetail !== existing.detail
-      const statusChanged = nextActive !== (existing.isActive === 1)
-      if (!fieldsChanged && !statusChanged) throw invalidInput('No hay cambios para guardar.')
+  try {
+    inTransaction(db, () => {
+      saveRuntime(
+        db,
+        id,
+        {
+          pid,
+          startedAt: options.now.toISOString(),
+          startedByQabase: true,
+          lastExitCode: null,
+          lastError: null,
+        },
+        options.now.toISOString(),
+      )
+      audit(
+        db,
+        actor,
+        'proxy.started',
+        'proxy',
+        id,
+        options.now,
+        undefined,
+        { pid, ports: ports.map((row) => row.port) },
+      )
+    })
+  } catch (error) {
+    await options.controller.stop(pid).catch(() => undefined)
+    throw error
+  }
+  return serviceView(db, id, options)
+}
 
-      const before = toView(db, existing)
-      const changes = {
-        id, accessId: nextAccessId, port: nextPort, detail: nextDetail,
-        isActive: nextActive, version: input.version, now: input.now.toISOString(),
-      }
-      if (!updateProxyRow(db, changes)) throw conflict()
-      const after = toView(db, findProxy(db, id)!)
+async function stopProxyUnlocked(
+  db: DatabaseSync,
+  actor: Actor,
+  id: number,
+  options: ProxyControlOptions & { confirmExternal?: boolean },
+): Promise<ProxyServiceView> {
+  const service = requireService(db, id)
+  const ports = servicePorts(db, id)
+  const runtime = findRuntime(db, id)
+  const listeners = await options.inspector.listListeners(
+    ports.map((row) => row.port),
+  )
 
-      if (fieldsChanged) {
-        audit(db, actor, 'proxy.updated', 'proxy', id, input.now, before, after)
-      }
-      if (statusChanged) {
-        audit(
-          db, actor,
-          after.isActive ? 'proxy.reactivated' : 'proxy.deactivated',
-          'proxy', id, input.now,
-          { isActive: before.isActive },
-          { isActive: after.isActive },
+  if (listeners.length === 0) {
+    if (
+      runtime?.pid &&
+      runtime.startedByQabase === 1 &&
+      (await options.inspector.isProcessAlive(runtime.pid))
+    ) {
+      const info = await options.inspector.describeProcess(runtime.pid)
+      if (!info || !isManagedCommand(service, info.commandLine)) {
+        throw conflict(
+          'No se pudo verificar que el proceso sea el proxy esperado; no se detiene.',
         )
       }
-      return after
+      try {
+        await options.controller.stop(runtime.pid)
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'No se pudo detener el proceso.'
+        markStopError(db, actor, id, options, message, runtime)
+        throw conflict('No se pudo detener el servicio.')
+      }
+    }
+    inTransaction(db, () => {
+      saveRuntime(
+        db,
+        id,
+        {
+          pid: null,
+          startedAt: null,
+          startedByQabase: false,
+          lastExitCode: 0,
+          lastError: null,
+        },
+        options.now.toISOString(),
+      )
+      audit(
+        db,
+        actor,
+        'proxy.stopped',
+        'proxy',
+        id,
+        options.now,
+        { pid: runtime?.pid ?? null },
+        { status: 'stopped' },
+      )
     })
-  } catch (error) { return uniquenessError(error) }
+    return serviceView(db, id, options)
+  }
+
+  const node = listeners.find(isNodeListener)
+  if (!node) {
+    const blocker = listeners[0]!
+    throw conflict(
+      `El puerto ${blocker.port} está ocupado por ${
+        blocker.processName || 'otro proceso'
+      }; no se detiene.`,
+    )
+  }
+
+  const managed = isManagedCommand(service, node.commandLine)
+  if (!managed && !options.confirmExternal) {
+    throw conflict(
+      'El servicio fue iniciado fuera de QABase. Confirma para detenerlo.',
+    )
+  }
+
+  try {
+    await options.controller.stop(node.pid)
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'No se pudo detener el proceso.'
+    markStopError(db, actor, id, options, message, runtime)
+    throw conflict('No se pudo detener el servicio.')
+  }
+
+  inTransaction(db, () => {
+    saveRuntime(
+      db,
+      id,
+      {
+        pid: null,
+        startedAt: null,
+        startedByQabase: false,
+        lastExitCode: 0,
+        lastError: null,
+      },
+      options.now.toISOString(),
+    )
+    audit(
+      db,
+      actor,
+      'proxy.stopped',
+      'proxy',
+      id,
+      options.now,
+      { pid: node.pid, managed },
+      { status: 'stopped' },
+    )
+  })
+  return serviceView(db, id, options)
+}
+
+export function startProxy(
+  db: DatabaseSync,
+  actor: Actor,
+  id: number,
+  options: ProxyControlOptions,
+): Promise<ProxyServiceView> {
+  return withServiceLock(id, () => startProxyUnlocked(db, actor, id, options))
+}
+
+export function stopProxy(
+  db: DatabaseSync,
+  actor: Actor,
+  id: number,
+  options: ProxyControlOptions & { confirmExternal?: boolean },
+): Promise<ProxyServiceView> {
+  return withServiceLock(id, () => stopProxyUnlocked(db, actor, id, options))
+}
+
+export function restartProxy(
+  db: DatabaseSync,
+  actor: Actor,
+  id: number,
+  options: ProxyControlOptions & { confirmExternal?: boolean },
+): Promise<ProxyServiceView> {
+  return withServiceLock(id, async () => {
+    const ports = servicePorts(db, id)
+    const listeners = await options.inspector.listListeners(
+      ports.map((row) => row.port),
+    )
+    const runtime = findRuntime(db, id)
+    const alive =
+      runtime?.pid !== null &&
+      runtime?.pid !== undefined &&
+      (await options.inspector.isProcessAlive(runtime.pid))
+    if (listeners.length > 0 || alive) {
+      await stopProxyUnlocked(db, actor, id, options)
+    }
+    const view = await startProxyUnlocked(db, actor, id, options)
+    audit(
+      db,
+      actor,
+      'proxy.restarted',
+      'proxy',
+      id,
+      options.now,
+      undefined,
+      { pid: view.runtime.pid },
+    )
+    return view
+  })
+}
+
+export function getProxyLogs(
+  db: DatabaseSync,
+  id: number,
+  logsPath: string,
+  lines: number,
+): ProxyLogsResponse {
+  const service = requireService(db, id)
+  return {
+    lines: readLogTail(logPathFor(logsPath, service.slug), lines),
+  }
+}
+
+export function systemProxyDependencies() {
+  return {
+    inspector: createSystemProcessInspector(),
+    controller: createSystemProcessController(),
+    healthCheck: defaultHealthCheck,
+  }
 }

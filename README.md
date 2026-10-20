@@ -37,6 +37,8 @@ npm start         # un solo proceso sirve la SPA y /api
 | Panel | Accesos directos a los módulos habilitados por permisos. |
 | Méritos e Incidencias | Alta, edición, anulación, historial, filtros, totales y resumen por QA. |
 | Mesa de Ayuda | Copia local de tickets asignados, sincronizada desde un agente local. **No crea tickets.** |
+| Accesos | Catálogo de destinos de firewall y asignaciones por QA. |
+| Proxies | Servicios reverse proxy, estado, operación y logs. |
 | Personal QA | Catálogo de personas, estados e historial. |
 | Usuarios | Cuentas, roles y restablecimiento de contraseñas. |
 | Roles | Roles y permisos. |

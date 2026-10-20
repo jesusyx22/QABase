@@ -180,7 +180,7 @@ describe('login', () => {
     expect(body.authenticated).toBe(true)
     expect(body.account.username).toBe('admin')
     expect(body.account.role.name).toBe('Administrador')
-    expect(body.account.permissions).toHaveLength(14)
+    expect(body.account.permissions).toHaveLength(15)
 
     const setCookie = String(response.headers['set-cookie'])
     expect(setCookie).toContain('HttpOnly')

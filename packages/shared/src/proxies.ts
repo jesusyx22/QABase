@@ -1,8 +1,8 @@
 /**
- * Contrato del catálogo de Proxies publicado.
+ * Contrato de servicios de proxy operables.
  *
  * Solo tipos: no contiene lógica ni acceso a datos. El API y la SPA comparten
- * estas formas para evitar divergencias al implementar en paralelo.
+ * estas formas para evitar divergencias.
  */
 
 export type ProxyEnvironment =
@@ -11,60 +11,77 @@ export type ProxyEnvironment =
   | 'production'
   | 'unspecified'
 
-export type ProxyProtocol = 'tcp' | 'udp' | 'both' | null
+export type ProxyStatus =
+  | 'active'
+  | 'starting'
+  | 'stopped'
+  | 'conflict'
+  | 'error'
 
-export type ProxyAccess = {
-  id: number
-  address: string
-  port: number
-  portEnd: number
-  environment: ProxyEnvironment
-  protocol: ProxyProtocol
-  detail: string | null
-  applications: string | null
-  urls: string | null
-  isActive: boolean
-  version: number
-  createdAt: string
-  updatedAt: string
-}
+export type ProxyHealth = 'up' | 'down' | 'skipped'
 
 export type ProxySettings = {
   host: string | null
   version: number | null
 }
 
-export type ProxyView = {
+export type ProxyRouteAccess = {
   id: number
+  address: string
   port: number
-  detail: string
+  portEnd: number
+  environment: ProxyEnvironment
+  detail: string | null
   isActive: boolean
-  version: number
+}
+
+export type ProxyRoute = {
+  id: number
+  path: string
+  target: string
+  detail: string | null
+  access: ProxyRouteAccess | null
+}
+
+export type ProxyPort = {
+  port: number
+  isPrimary: boolean
+  listening: boolean
+}
+
+export type ProxyRuntime = {
+  status: ProxyStatus
+  pid: number | null
+  managed: boolean
+  health: ProxyHealth
+  detail: string | null
+  startedAt: string | null
+}
+
+export type ProxyServiceView = {
+  id: number
+  slug: string
+  name: string
+  environment: ProxyEnvironment
+  healthPath: string | null
+  isActive: boolean
+  routes: ProxyRoute[]
+  ports: ProxyPort[]
+  runtime: ProxyRuntime
   createdAt: string
   updatedAt: string
-  access: ProxyAccess
 }
 
 export type ProxyListResponse = {
   settings: ProxySettings
-  proxies: ProxyView[]
-}
-
-export type CreateProxyInput = {
-  accessId: number
-  port: number
-  detail: string
-}
-
-export type UpdateProxyInput = {
-  accessId?: number
-  port?: number
-  detail?: string
-  isActive?: boolean
-  version: number
+  services: ProxyServiceView[]
 }
 
 export type UpdateProxySettingsInput = {
   host: string
   version?: number
+}
+
+export type ProxyLogsResponse = {
+  lines: string[]
 }

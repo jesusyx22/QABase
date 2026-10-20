@@ -33,6 +33,7 @@ const SEED_ROLES: SeedRole[] = [
       'mesa.crear',
       'accesos.ver',
       'proxies.ver',
+      'proxies.operar',
     ],
   },
   {

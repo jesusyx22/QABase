@@ -1,62 +1,151 @@
-import type {
-  CreateProxyInput,
-  UpdateProxyInput,
-  UpdateProxySettingsInput,
-} from '@qabase/shared'
+import type { UpdateProxySettingsInput } from '@qabase/shared'
 import type { FastifyInstance } from 'fastify'
 import type { DatabaseSync } from 'node:sqlite'
 import type { Clock } from '../core/clock'
 import { requirePermission } from '../plugins/auth'
 import { actorFromSession } from '../modules/identity/session-actor'
-import { createProxy, listAccessOptions, listProxies, updateProxy, updateProxySettings } from '../modules/proxies/service'
+import {
+  getProxyLogs,
+  listProxies,
+  restartProxy,
+  startProxy,
+  stopProxy,
+  updateProxySettings,
+} from '../modules/proxies/service'
+import type { ProcessInspector } from '../modules/proxies/process'
+import type { ProxyProcessController } from '../modules/proxies/control'
 
-const fields = {
-  accessId: { type: 'integer', minimum: 1 },
-  port: { type: 'integer', minimum: 1, maximum: 65535 },
-  detail: { type: 'string', minLength: 1, maxLength: 200 },
-} as const
 const version = { type: 'integer', minimum: 1 } as const
-export function registerProxyRoutes(app: FastifyInstance, options: { db: DatabaseSync; clock: Clock }): void {
-  app.get('/api/proxies', async request => {
+const idParams = {
+  type: 'object',
+  required: ['id'],
+  properties: { id: { type: 'integer', minimum: 1 } },
+} as const
+const externalBody = {
+  type: 'object',
+  additionalProperties: false,
+  properties: { confirmExternal: { type: 'boolean' } },
+} as const
+
+export type ProxyRouteOptions = {
+  db: DatabaseSync
+  clock: Clock
+  proxiesPath: string
+  logsPath: string
+  inspector: ProcessInspector
+  controller: ProxyProcessController
+  healthCheck: (port: number, path: string) => Promise<boolean>
+}
+
+export function registerProxyRoutes(
+  app: FastifyInstance,
+  options: ProxyRouteOptions,
+): void {
+  app.get('/api/proxies', async (request) => {
     requirePermission(request, 'proxies.ver')
-    return listProxies(options.db)
+    return listProxies(options.db, {
+      inspector: options.inspector,
+      healthCheck: options.healthCheck,
+      now: options.clock(),
+    })
   })
-  app.get('/api/proxies/access-options', async request => {
-    requirePermission(request, 'proxies.gestionar')
-    return listAccessOptions(options.db)
+
+  app.patch(
+    '/api/proxies/settings',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['host'],
+          properties: {
+            host: { type: 'string', minLength: 1, maxLength: 15 },
+            version,
+          },
+        },
+      },
+    },
+    async (request) => {
+      const auth = requirePermission(request, 'proxies.gestionar')
+      const body = request.body as UpdateProxySettingsInput
+      return updateProxySettings(options.db, actorFromSession(auth), {
+        ...body,
+        now: options.clock(),
+      })
+    },
+  )
+
+  const controlOptions = (now: Date) => ({
+    proxiesPath: options.proxiesPath,
+    logsPath: options.logsPath,
+    inspector: options.inspector,
+    controller: options.controller,
+    healthCheck: options.healthCheck,
+    now,
   })
-  app.patch('/api/proxies/settings', {
-    schema: {
-      body: {
-        type: 'object', additionalProperties: false, required: ['host'],
-        properties: { host: { type: 'string', minLength: 1, maxLength: 15 }, version },
-      }
-    }
-  }, async request => {
-    const auth = requirePermission(request, 'proxies.gestionar')
-    const body = request.body as UpdateProxySettingsInput
-    return updateProxySettings(options.db, actorFromSession(auth), { ...body, now: options.clock() })
-  })
-  app.post('/api/proxies', {
-    schema: {
-      body: {
-        type: 'object', additionalProperties: false, required: ['accessId', 'port', 'detail'], properties: fields,
-      }
-    }
-  }, async (request, reply) => {
-    const auth = requirePermission(request, 'proxies.gestionar')
-    const body = request.body as CreateProxyInput
-    return reply.code(201).send(createProxy(options.db, actorFromSession(auth), { ...body, now: options.clock() }))
-  })
-  app.patch('/api/proxies/:id', {
-    schema: {
-      params: { type: 'object', required: ['id'], properties: { id: { type: 'integer', minimum: 1 } } },
-      body: { type: 'object', additionalProperties: false, required: ['version'], properties: { ...fields, isActive: { type: 'boolean' }, version } },
-    }
-  }, async request => {
-    const auth = requirePermission(request, 'proxies.gestionar')
-    const { id } = request.params as { id: number }
-    const body = request.body as UpdateProxyInput
-    return updateProxy(options.db, actorFromSession(auth), id, { ...body, now: options.clock() })
-  })
+
+  app.post(
+    '/api/proxies/:id/start',
+    { schema: { params: idParams } },
+    async (request) => {
+      const auth = requirePermission(request, 'proxies.operar')
+      const { id } = request.params as { id: number }
+      return startProxy(
+        options.db,
+        actorFromSession(auth),
+        id,
+        controlOptions(options.clock()),
+      )
+    },
+  )
+
+  app.post(
+    '/api/proxies/:id/stop',
+    { schema: { params: idParams, body: externalBody } },
+    async (request) => {
+      const auth = requirePermission(request, 'proxies.operar')
+      const { id } = request.params as { id: number }
+      const body = (request.body ?? {}) as { confirmExternal?: boolean }
+      return stopProxy(options.db, actorFromSession(auth), id, {
+        ...controlOptions(options.clock()),
+        confirmExternal: body.confirmExternal,
+      })
+    },
+  )
+
+  app.post(
+    '/api/proxies/:id/restart',
+    { schema: { params: idParams, body: externalBody } },
+    async (request) => {
+      const auth = requirePermission(request, 'proxies.operar')
+      const { id } = request.params as { id: number }
+      const body = (request.body ?? {}) as { confirmExternal?: boolean }
+      return restartProxy(options.db, actorFromSession(auth), id, {
+        ...controlOptions(options.clock()),
+        confirmExternal: body.confirmExternal,
+      })
+    },
+  )
+
+  app.get(
+    '/api/proxies/:id/logs',
+    {
+      schema: {
+        params: idParams,
+        querystring: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            lines: { type: 'integer', minimum: 1, maximum: 500 },
+          },
+        },
+      },
+    },
+    async (request) => {
+      requirePermission(request, 'proxies.operar')
+      const { id } = request.params as { id: number }
+      const { lines } = request.query as { lines?: number }
+      return getProxyLogs(options.db, id, options.logsPath, lines ?? 100)
+    },
+  )
 }

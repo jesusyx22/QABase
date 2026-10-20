@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import { allowedOriginsForPort, loadConfig } from './config'
 import { systemClock } from './core/clock'
 import { createArgon2Hasher, createDecoyHash } from './core/security/password'
@@ -47,6 +48,8 @@ const app = await buildServer({
   clock: systemClock,
   throttle: new LoginThrottle(),
   allowedOrigins: allowedOriginsForPort(config.port),
+  proxiesPath: join(config.rootDir, 'scripts', 'proxies'),
+  proxyLogsPath: join(config.rootDir, 'data', 'logs'),
 })
 
 const shutdown = async () => {

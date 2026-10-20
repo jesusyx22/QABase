@@ -71,6 +71,8 @@ Si se toca UI: revisar `DESIGN.md` y cargar la skill `web-design-guidelines`.
 - No lo actualices en cada turno ni por cambios triviales. Si no hay delta, dilo.
 - Al cerrar la tarea, archiva `ACTIVE.md` como
   `docs/handoffs/AAAA-MM-DD-<slug>.md`.
+- En ramas que no son `main`, haz commit y push de cada cambio para conservar
+  historial. En `main` sigue haciendo falta autorización explícita.
 - `learn` es distinto: guarda solo conocimiento no obvio; no lo mezcles con el
   handoff.
 

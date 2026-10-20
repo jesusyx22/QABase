@@ -66,7 +66,12 @@ describe('secreto de sesión', () => {
     const secret = ensureSessionSecret({}, root)
 
     expect(secret).toHaveLength(64)
-    expect(statSync(sessionSecretPath(root)).mode & 0o777).toBe(0o600)
+    const mode = statSync(sessionSecretPath(root)).mode & 0o777
+    if (process.platform === 'win32') {
+      expect(mode & 0o200).toBe(0o200)
+    } else {
+      expect(mode).toBe(0o600)
+    }
     expect(ensureSessionSecret({}, root)).toBe(secret)
     expect(requireSessionSecret({}, root)).toBe(secret)
   })

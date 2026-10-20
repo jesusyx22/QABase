@@ -66,10 +66,10 @@ async function createAdmin(db: ReturnType<typeof createTestDatabase>) {
 }
 
 describe('seeds de identidad', () => {
-  it('crean 14 permisos, 3 roles y las concesiones iniciales', () => {
+  it('crean 15 permisos, 3 roles y las concesiones iniciales', () => {
     const db = createTestDatabase()
 
-    expect(count(db, 'permissions')).toBe(14)
+    expect(count(db, 'permissions')).toBe(15)
     expect(count(db, 'roles')).toBe(3)
 
     const admin = findProtectedRole(db)!
@@ -82,7 +82,7 @@ describe('seeds de identidad', () => {
         name: admin.name,
         isProtected: true,
       }),
-    ).toHaveLength(14)
+    ).toHaveLength(15)
     expect(
       resolvePermissions(db, {
         id: editor.id,
@@ -97,6 +97,7 @@ describe('seeds de identidad', () => {
       'mesa.crear',
       'accesos.ver',
       'proxies.ver',
+      'proxies.operar',
     ])
     expect(
       resolvePermissions(db, {
@@ -105,7 +106,7 @@ describe('seeds de identidad', () => {
         isProtected: false,
       }),
     ).toEqual(['registros.ver', 'mesa.ver', 'accesos.ver', 'proxies.ver'])
-    expect(count(db, 'role_permissions')).toBe(11)
+    expect(count(db, 'role_permissions')).toBe(12)
 
     db.close()
   })

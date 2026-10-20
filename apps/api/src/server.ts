@@ -13,6 +13,16 @@ import { registerAccountRoutes } from './routes/account'
 import { registerAccessAssignmentRoutes } from './routes/access-assignments'
 import { registerAccessRoutes } from './routes/accesses'
 import { registerProxyRoutes } from './routes/proxies'
+import { syncProxyCatalog } from './modules/proxies/catalog'
+import {
+  createSystemProcessInspector,
+  defaultHealthCheck,
+  type ProcessInspector,
+} from './modules/proxies/process'
+import {
+  createSystemProcessController,
+  type ProxyProcessController,
+} from './modules/proxies/control'
 import { registerHelpdeskRoutes } from './routes/helpdesk'
 import { registerPersonalRoutes } from './routes/personal'
 import { registerRecordRoutes } from './routes/records'
@@ -31,6 +41,11 @@ export type ServerOptions = {
   clock: Clock
   throttle: LoginThrottle
   allowedOrigins: ReadonlySet<string>
+  proxiesPath?: string
+  proxyLogsPath?: string
+  proxyInspector?: ProcessInspector
+  proxyController?: ProxyProcessController
+  proxyHealthCheck?: (port: number, path: string) => Promise<boolean>
 }
 
 function errorBody(code: ApiError['error']['code'], message: string): ApiError {
@@ -141,7 +156,28 @@ export async function buildServer(options: ServerOptions): Promise<FastifyInstan
     clock: options.clock,
   })
 
-  registerProxyRoutes(app, { db: options.db, clock: options.clock })
+  const proxiesPath =
+    options.proxiesPath ?? join(process.cwd(), 'scripts', 'proxies')
+  try {
+    syncProxyCatalog(options.db, proxiesPath, options.clock())
+  } catch (error) {
+    console.warn(
+      `No se pudo sincronizar el catálogo de proxies: ${
+        error instanceof Error ? error.message : 'error desconocido'
+      }`,
+    )
+  }
+
+  registerProxyRoutes(app, {
+    db: options.db,
+    clock: options.clock,
+    proxiesPath,
+    logsPath:
+      options.proxyLogsPath ?? join(process.cwd(), 'data', 'logs'),
+    inspector: options.proxyInspector ?? createSystemProcessInspector(),
+    controller: options.proxyController ?? createSystemProcessController(),
+    healthCheck: options.proxyHealthCheck ?? defaultHealthCheck,
+  })
 
   if (hasWebBuild) {
     await app.register(fastifyStatic, { root: options.webDistPath, wildcard: false })

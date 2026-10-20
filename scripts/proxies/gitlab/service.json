@@ -1,0 +1,16 @@
+{
+  "name": "GitLab",
+  "environment": "qa",
+  "entry": "proxy.js",
+  "ports": [8081],
+  "primaryPort": 8081,
+  "healthPath": null,
+  "routes": [
+    {
+      "path": "/",
+      "target": "http://10.5.5.201:80",
+      "detail": "GitLab",
+      "access": { "address": "10.5.5.201", "port": 80 }
+    }
+  ]
+}

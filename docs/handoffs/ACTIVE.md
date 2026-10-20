@@ -1,115 +1,101 @@
 # Handoff activo — QABase
 
-Actualizado: 2026-10-20 21:20 UTC
+Actualizado: 2026-10-20 22:08 UTC
 
 ## Objetivo
 
-Mantener QABase como panel local del equipo de QA, dejar el entorno local
-sincronizado con la base del VPS y preparar el siguiente módulo o ajuste.
+Convertir Proxies en un módulo de servicios operables: catálogo con rutas y
+puertos, monitoreo, arranque/parada manual y logs, sin arranque automático.
 
 ## Estado
 
-- Rama `main`; este relevo se sube a `origin/main`.
-- Working tree limpio al iniciar la sesión; este relevo solo añade documentación.
-- Módulo **Proxies** completo: migración, API, permisos, auditoría, UI y tests.
-- Base local reemplazada por un snapshot consistente de la base del VPS
-  (`integrity_check: ok`, migraciones `001`–`009`, 173 accesos y 21 QAs).
-- Respaldo de la base local anterior en
-  `data/qabase.local-backup-20261020-153614.sqlite` (ignorado por Git).
-- `npm run verify` en Windows: typecheck, lint y build en verde; **338/340 tests**;
-  dos fallos POSIX conocidos (ver Pendiente).
-- Web y API activas en `localhost:5173` y `127.0.0.1:3000`; `/api/health` → 200.
-- Las sesiones del VPS no se reutilizan: se conservó el `session-secret` local.
+- Rama **`feat/proxies-servicios`**, publicada en `origin`; el trabajo de esta
+  sesión está en el árbol local y **sin commit**.
+- `npm run verify` en verde en Windows: 45 archivos, **338 tests**, typecheck,
+  lint y build.
+- Migración `010-proxy-services` aplicada en la base local.
+- Catálogo sincronizado desde `scripts/proxies/`: GitLab, Mantis BT y Proxy
+  Sentinel, con 4 rutas y 4 puertos.
+- Estado real verificado: los tres aparecen **Activo**; Sentinel con health UP.
+  `managed=false` porque siguen siendo procesos iniciados fuera de QABase.
+- UI Proxies: catálogo, filtros, estado, iniciar/detener/reiniciar con
+  confirmación, detalle y últimas 100 líneas de log. Auto-refresh cada 10 s.
+- Permisos: `proxies.ver` para los tres roles, `proxies.operar` para
+  Administrador y Editor, `proxies.gestionar` solo Administrador.
+- Logs en `data/logs/<slug>.log`; procesos detached con PID y reconciliación.
+- Sentinel se reimplementó con `http` nativo; GitLab y Mantis se copiaron sin
+  dependencias externas.
 
 ## Decisiones vigentes
 
-- Spec: `docs/specs/010-proxies.md`.
-- ADR: `docs/adr/0012-modulo-proxies.md`.
+- Spec: `docs/specs/011-proxies-servicios.md`.
+- ADR: `docs/adr/0013-operacion-proxies.md` (reemplaza parcialmente al 0012).
 - Contrato compartido: `packages/shared/src/proxies.ts`.
-- Estrategia multiagente: `AGENTS.md`.
-- Un proxy por acceso; puerto y detalle únicos; sin borrado físico.
-- IP global IPv4 única, editable solo por Administrador.
-- No hay historial visible; sí auditoría interna.
-- Los cambios de API/UI se prueban con el gate completo.
-- El handoff vivo `docs/handoffs/ACTIVE.md` se actualiza en hitos definidos en
-  `AGENTS.md`; se archiva al cerrar la tarea.
-- La base local se reemplazó con la API detenida y un snapshot SQLite
-  consistente; no se versionan credenciales ni datos de acceso.
-- En Windows el gate no es equivalente al de Linux hasta resolver los dos tests
-  con supuestos POSIX.
+- Un servicio tiene varias rutas y puertos; el vínculo a `accesses` es opcional.
+- El catálogo se define por carpetas `scripts/proxies/<slug>/service.json`; la
+  UI no ejecuta comandos configurables.
+- QABase lanza `node <entry>` detached; no hay servicio ni tarea de Windows.
+- No hay arranque automático; toda operación es manual y auditada.
+- Un puerto ocupado por otro proceso es conflicto y nunca se mata.
+- Revisión de Codex: se corrigieron spawn asíncrono, concurrencia por servicio,
+  parada durante arranque, lectura de logs, identidad de proceso y catálogo.
 
 ## Hecho
 
-- Módulo Proxies en el grupo Principal.
-- Listado, búsqueda, filtros, copia de endpoint, alta, edición y estado.
-- Permisos `proxies.ver` y `proxies.gestionar`.
-- Migración `migrations/009-proxies.sql`.
-- Contrato compartido entre API y SPA.
-- Revisión independiente de API y UI; hallazgos corregidos.
-- Regla de handoff vivo por hitos y comando `/snapshot`.
-- Importación de la base del VPS y respaldo de la base local anterior.
-- Notas operativas en `AGENTS.md`: TTY del setup, snapshot SQLite, SSH sin clave
-  y reescritura de `package-lock.json` por npm 11.
+- Migración `010-proxy-services.sql` con servicios, puertos, rutas y runtime.
+- Sincronización idempotente del catálogo y resolución de accesos de firewall.
+- Inspección de estado por proceso + puerto + health opcional.
+- Rutas `GET /api/proxies`, `PATCH /api/proxies/settings`,
+  `POST /api/proxies/:id/{start,stop,restart}` y `GET /api/proxies/:id/logs`.
+- Auditoría de inicio, parada, reinicio, fallos y cambio de IP global.
+- UI y tests de página con estados, permisos y confirmaciones.
+- Smoke real de arranque/parada con un proxy temporal en el puerto 3999.
 
 ## Pendiente
 
-- Hacer multiplataforma `apps/api/src/config.test.ts` (separador `/`) y
-  `apps/api/src/core/security/security.test.ts` (modo `0600`) o ejecutar el gate
-  en Linux.
-- Rotar la credencial SSH usada en la sesión (se compartió fuera del repo).
-- Decidir el siguiente módulo o ajuste de QABase.
-- Configurar la IP global y los proxies reales desde la UI.
-- Validar el flujo con datos reales de la Mesa de Ayuda.
+- Revisión independiente final de la UI y del diff completo.
+- Commit y push de la rama (requiere autorización explícita).
+- Probar el flujo real: detener los procesos externos y arrancarlos desde
+  QABase para que pasen a `managed=true`. Hacerlo fuera de horario de uso.
+- Validar la pantalla en navegador y el aviso de proceso externo.
+- Decidir si se añade arranque automático en una rama posterior.
 
 ## Archivos clave
 
-- `AGENTS.md`
-- `docs/specs/010-proxies.md`
-- `docs/adr/0012-modulo-proxies.md`
-- `migrations/009-proxies.sql`
-- `apps/api/src/modules/proxies/`
+- `migrations/010-proxy-services.sql`
+- `packages/shared/src/proxies.ts`
+- `packages/shared/src/permissions.ts`
+- `apps/api/src/modules/proxies/{catalog,process,control,repository,service}.ts`
 - `apps/api/src/routes/proxies.ts`
 - `apps/web/src/features/proxies/`
 - `apps/web/src/pages/ProxiesPage.tsx`
-- `packages/shared/src/proxies.ts`
-- `apps/api/src/config.test.ts` (pendiente multiplataforma)
-- `apps/api/src/core/security/security.test.ts` (pendiente multiplataforma)
+- `scripts/proxies/{sentinel,gitlab,mantis}/`
+- `docs/specs/011-proxies-servicios.md`
+- `docs/adr/0013-operacion-proxies.md`
 
 ## Verificación
-
-Linux/VPS (evidencia previa):
 
 ```text
 npm run verify
 Test Files  45 passed (45)
-Tests       340 passed (340)
+Tests       338 passed (338)
+typecheck, lint y build en verde
 ```
-
-Windows (esta sesión):
-
-```text
-npm run verify
-Test Files  2 failed | 43 passed (45)
-Tests       2 failed | 338 passed (340)
-```
-
-Fallos: `config.test.ts` espera separador `/` y `security.test.ts` espera modo
-`0600`; Windows devuelve `\` y `0666`.
 
 ```text
 GET /api/health -> 200 {"status":"ok"}
-GET /api/session -> setupRequired: false
 ```
+
+Estado real de los tres servicios: `active`; Sentinel `health=up`;
+GitLab/Mantis/Sentinel `managed=false` hasta reiniciarlos desde QABase.
 
 ## Siguiente paso
 
-1. Resolver los dos tests POSIX y volver a `npm run verify` en Windows.
-2. Decidir el siguiente módulo o ajuste. Antes de implementar: grilling si hay
-   ambigüedad, spec en `docs/specs/`, TDD por seams y contrato compartido si
-   cruza API/UI.
+Revisar el diff completo con un agente distinto al implementador, probar la UI
+en navegador y, con autorización, commitear la rama. Después, coordinar una
+ventana para reiniciar los proxies desde QABase y confirmar `managed=true`.
 
 ## Skills sugeridas
 
-`grilling`/`grill-me` si hay ambigüedad, `tdd` para implementar,
-`web-design-guidelines` y `vercel-react-best-practices` para UI, `code-review`
-antes de cerrar y `handoff` al terminar.
+`code-review` para el cierre, `web-design-guidelines` para la revisión visual y
+`handoff` al terminar.

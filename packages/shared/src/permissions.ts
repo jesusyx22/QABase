@@ -72,6 +72,11 @@ export const PERMISSIONS = [
     description: 'Consultar el catálogo de proxies publicados.',
   },
   {
+    key: 'proxies.operar',
+    label: 'Operar proxies',
+    description: 'Iniciar, detener y reiniciar servicios de proxy.',
+  },
+  {
     key: 'proxies.gestionar',
     label: 'Gestionar proxies',
     description: 'Configurar el puente y gestionar proxies publicados.',

@@ -21,22 +21,19 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { errorMessage } from '@/lib/format'
-import {
-  updateProxySettings,
-  type ProxySettings,
-} from './api'
+import { updateProxySettings, type ProxySettings } from './api'
 import { validateIpv4 } from './labels'
 
 type GlobalHostCardProps = {
   settings: ProxySettings
-  totalEndpoints: number
+  totalServices: number
   canManage: boolean
   onSaved: () => void
 }
 
 export function GlobalHostCard({
   settings,
-  totalEndpoints,
+  totalServices,
   canManage,
   onSaved,
 }: GlobalHostCardProps) {
@@ -111,7 +108,7 @@ export function GlobalHostCard({
             <CardTitle>IP global del puente</CardTitle>
           </div>
           <CardDescription>
-            Dirección IPv4 del host donde corre el reverse proxy.
+            Dirección IPv4 del host donde corren los proxies.
           </CardDescription>
           {canManage ? (
             <CardAction>
@@ -130,7 +127,7 @@ export function GlobalHostCard({
         <CardContent>
           {isConfigured ? (
             <div className="flex flex-wrap items-center gap-3">
-              <span className="font-mono text-lg font-semibold tracking-tight text-foreground">
+              <span className="font-mono text-lg font-semibold tracking-tight tabular-nums text-foreground">
                 {settings.host}
               </span>
               <Button
@@ -195,15 +192,15 @@ export function GlobalHostCard({
             <DialogDescription>
               {isConfigured
                 ? 'Actualiza la dirección IPv4 del host puente.'
-                : 'Define la dirección IPv4 donde corre el reverse proxy.'}
+                : 'Define la dirección IPv4 donde corren los proxies.'}
             </DialogDescription>
           </DialogHeader>
 
-          {isConfigured && totalEndpoints > 0 ? (
+          {isConfigured && totalServices > 0 ? (
             <Alert className="border-warning/50 bg-warning/5 text-foreground">
               <AlertDescription className="text-xs">
-                Esta acción modificará el endpoint de {totalEndpoints}{' '}
-                {totalEndpoints === 1 ? 'proxy publicado' : 'proxies publicados'}.
+                Esta acción modificará el host publicado de {totalServices}{' '}
+                {totalServices === 1 ? 'servicio' : 'servicios'}.
               </AlertDescription>
             </Alert>
           ) : null}
@@ -223,11 +220,11 @@ export function GlobalHostCard({
                   setError(null)
                 }}
                 disabled={submitting}
-                placeholder="ej. 192.168.1.50"
+                placeholder="ej. 10.4.24.18"
                 autoFocus
               />
               <p className="text-xs text-muted-foreground">
-                Debe ser una dirección IPv4 válida (ej. 192.168.1.50).
+                Debe ser una dirección IPv4 válida (ej. 10.4.24.18).
               </p>
             </div>
 
