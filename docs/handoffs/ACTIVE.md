@@ -11,7 +11,7 @@ puertos, monitoreo, arranque/parada manual y logs, sin arranque automático.
 
 - Rama **`feat/proxies-servicios`**, publicada en `origin`; el trabajo de esta
   sesión está commiteado y pusheado.
-- `npm run verify` en verde en Windows: 45 archivos, **340 tests**, typecheck,
+- `npm run verify` en verde en Windows: 45 archivos, **341 tests**, typecheck,
   lint y build.
 - Migración `010-proxy-services` aplicada en la base local.
 - Catálogo sincronizado desde `scripts/proxies/`: GitLab, Mantis BT y Proxy
@@ -29,7 +29,8 @@ puertos, monitoreo, arranque/parada manual y logs, sin arranque automático.
   `.js` con `require` fallaban como ESM. El antiguo `runner.js` externo de
   Mantis se retiró para que no reinicie el proceso a espaldas de QABase.
 - UI Proxies: catálogo, filtros, estado, iniciar/detener/reiniciar con
-  confirmación, detalle y últimas 100 líneas de log. Auto-refresh cada 10 s.
+  confirmación, detalle y últimas 100 líneas de log. Acciones en línea:
+  Detener en rojo (`--danger`), Reiniciar en azul primario. Auto-refresh 10 s.
 - Permisos: `proxies.ver` para los tres roles, `proxies.operar` para
   Administrador y Editor, `proxies.gestionar` solo Administrador.
 - Logs en `data/logs/<slug>.log`; procesos detached con PID y reconciliación.
@@ -94,7 +95,7 @@ puertos, monitoreo, arranque/parada manual y logs, sin arranque automático.
 ```text
 npm run verify
 Test Files  45 passed (45)
-Tests       340 passed (340)
+Tests       341 passed (341)
 typecheck, lint y build en verde
 ```
 

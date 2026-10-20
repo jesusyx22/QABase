@@ -645,18 +645,17 @@ export function ProxiesPage() {
                       </TableCell>
 
                       {/* 6. Acciones */}
-                      <TableCell className="text-right align-top">
-                        <div className="flex flex-wrap justify-end gap-1">
+                      <TableCell className="whitespace-nowrap text-right align-top">
+                        <div className="flex flex-nowrap items-center justify-end gap-1">
                           <Button
                             type="button"
                             variant="ghost"
-                            size="xs"
+                            size="icon-xs"
                             onClick={() => setSelectedServiceId(service.id)}
                             aria-label={`Ver detalle de ${service.name}`}
                             title="Ver detalle del servicio y logs"
                           >
-                            <Eye className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-                            <span>Detalle</span>
+                            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
                           </Button>
 
                           {canOperate ? (
@@ -682,6 +681,7 @@ export function ProxiesPage() {
                                   type="button"
                                   variant="destructive"
                                   size="xs"
+                                  className="border-danger/40 bg-danger/10 text-danger hover:bg-danger/20 hover:text-danger focus-visible:border-danger/50 focus-visible:ring-danger/30"
                                   disabled={isBusy}
                                   onClick={() =>
                                     setActionTarget({
@@ -702,6 +702,7 @@ export function ProxiesPage() {
                                   type="button"
                                   variant="outline"
                                   size="xs"
+                                  className="border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
                                   disabled={isBusy}
                                   onClick={() =>
                                     setActionTarget({

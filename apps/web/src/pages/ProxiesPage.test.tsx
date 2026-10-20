@@ -301,6 +301,23 @@ describe('ProxiesPage', () => {
     expect(screen.getByText('Conflicto')).toBeInTheDocument()
   })
 
+  it('mantiene Detener y Reiniciar en línea con colores semánticos', async () => {
+    renderPage()
+
+    await screen.findByText('Proxy Sentinel')
+    const stop = screen.getByRole('button', {
+      name: 'Detener servicio Proxy Sentinel',
+    })
+    const restart = screen.getByRole('button', {
+      name: 'Reiniciar servicio Proxy Sentinel',
+    })
+
+    expect(stop.parentElement).toBe(restart.parentElement)
+    expect(stop.parentElement).toHaveClass('flex-nowrap')
+    expect(stop).toHaveClass('text-danger')
+    expect(restart).toHaveClass('text-primary')
+  })
+
   it('los badges Inactivo y Acceso inactivo usan estilo neutro/gris (DESIGN.md)', async () => {
     renderPage()
 
