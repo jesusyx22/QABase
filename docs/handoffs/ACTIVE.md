@@ -1,20 +1,25 @@
 # Handoff activo — QABase
 
-Actualizado: 2026-10-20 18:13 UTC
+Actualizado: 2026-10-20 21:20 UTC
 
 ## Objetivo
 
-Mantener QABase como panel local del equipo de QA y dejar listo el siguiente
-módulo o ajuste que se decida.
+Mantener QABase como panel local del equipo de QA, dejar el entorno local
+sincronizado con la base del VPS y preparar el siguiente módulo o ajuste.
 
 ## Estado
 
-- Rama `main`, commit `4498ff4`, sincronizada con `origin/main`.
-- Working tree limpio al crear este archivo.
+- Rama `main`; este relevo se sube a `origin/main`.
+- Working tree limpio al iniciar la sesión; este relevo solo añade documentación.
 - Módulo **Proxies** completo: migración, API, permisos, auditoría, UI y tests.
-- `npm run verify` en verde: 45 archivos, 340 tests, typecheck, lint y build.
-- Base local migrada (`009-proxies.sql`); sin IP global ni proxies cargados.
-- Servidor activo en `127.0.0.1:3000`; `/api/health` responde `200`.
+- Base local reemplazada por un snapshot consistente de la base del VPS
+  (`integrity_check: ok`, migraciones `001`–`009`, 173 accesos y 21 QAs).
+- Respaldo de la base local anterior en
+  `data/qabase.local-backup-20261020-153614.sqlite` (ignorado por Git).
+- `npm run verify` en Windows: typecheck, lint y build en verde; **338/340 tests**;
+  dos fallos POSIX conocidos (ver Pendiente).
+- Web y API activas en `localhost:5173` y `127.0.0.1:3000`; `/api/health` → 200.
+- Las sesiones del VPS no se reutilizan: se conservó el `session-secret` local.
 
 ## Decisiones vigentes
 
@@ -28,6 +33,10 @@ módulo o ajuste que se decida.
 - Los cambios de API/UI se prueban con el gate completo.
 - El handoff vivo `docs/handoffs/ACTIVE.md` se actualiza en hitos definidos en
   `AGENTS.md`; se archiva al cerrar la tarea.
+- La base local se reemplazó con la API detenida y un snapshot SQLite
+  consistente; no se versionan credenciales ni datos de acceso.
+- En Windows el gate no es equivalente al de Linux hasta resolver los dos tests
+  con supuestos POSIX.
 
 ## Hecho
 
@@ -38,13 +47,19 @@ módulo o ajuste que se decida.
 - Contrato compartido entre API y SPA.
 - Revisión independiente de API y UI; hallazgos corregidos.
 - Regla de handoff vivo por hitos y comando `/snapshot`.
+- Importación de la base del VPS y respaldo de la base local anterior.
+- Notas operativas en `AGENTS.md`: TTY del setup, snapshot SQLite, SSH sin clave
+  y reescritura de `package-lock.json` por npm 11.
 
 ## Pendiente
 
+- Hacer multiplataforma `apps/api/src/config.test.ts` (separador `/`) y
+  `apps/api/src/core/security/security.test.ts` (modo `0600`) o ejecutar el gate
+  en Linux.
+- Rotar la credencial SSH usada en la sesión (se compartió fuera del repo).
 - Decidir el siguiente módulo o ajuste de QABase.
 - Configurar la IP global y los proxies reales desde la UI.
 - Validar el flujo con datos reales de la Mesa de Ayuda.
-- No hay trabajo de código pendiente conocido en `main`.
 
 ## Archivos clave
 
@@ -57,8 +72,12 @@ módulo o ajuste que se decida.
 - `apps/web/src/features/proxies/`
 - `apps/web/src/pages/ProxiesPage.tsx`
 - `packages/shared/src/proxies.ts`
+- `apps/api/src/config.test.ts` (pendiente multiplataforma)
+- `apps/api/src/core/security/security.test.ts` (pendiente multiplataforma)
 
 ## Verificación
+
+Linux/VPS (evidencia previa):
 
 ```text
 npm run verify
@@ -66,20 +85,28 @@ Test Files  45 passed (45)
 Tests       340 passed (340)
 ```
 
+Windows (esta sesión):
+
 ```text
-npm run db:migrate
-Migraciones aplicadas: 1.
+npm run verify
+Test Files  2 failed | 43 passed (45)
+Tests       2 failed | 338 passed (340)
 ```
+
+Fallos: `config.test.ts` espera separador `/` y `security.test.ts` espera modo
+`0600`; Windows devuelve `\` y `0666`.
 
 ```text
 GET /api/health -> 200 {"status":"ok"}
+GET /api/session -> setupRequired: false
 ```
 
 ## Siguiente paso
 
-Esperar la decisión del usuario sobre el próximo módulo o ajuste. Antes de
-implementar: grilling si hay ambigüedad, spec en `docs/specs/`, TDD por seams y
-contrato compartido si cruza API/UI.
+1. Resolver los dos tests POSIX y volver a `npm run verify` en Windows.
+2. Decidir el siguiente módulo o ajuste. Antes de implementar: grilling si hay
+   ambigüedad, spec en `docs/specs/`, TDD por seams y contrato compartido si
+   cruza API/UI.
 
 ## Skills sugeridas
 

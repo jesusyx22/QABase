@@ -127,3 +127,7 @@ Solo lectura. QABase **no** llama a la web institucional: el VPS no la alcanza. 
 - El API escucha únicamente en loopback (`127.0.0.1:3000`). Para verlo desde Termux o Windows hace falta un túnel SSH: `ssh -N -L 3000:127.0.0.1:3000 usuario@vps` y abrir `http://localhost:3000`. No exponer el puerto directamente.
 - React 19: `react-hooks/set-state-in-effect` rechaza `setLoading(true)` síncrono dentro de un `useEffect`; deriva el estado de carga de una clave de petición y actualiza solo en callbacks asíncronos.
 - Si una página es lazy en `registry.ts` y se importa estáticamente en `App.tsx`, Vite duplica el chunk; reutiliza el componente lazy del registry en las rutas.
+- `npm run setup` exige una TTY: `apps/api/src/cli/prompts.ts` aborta sin terminal interactiva, así que un agente no puede crear el administrador; debe ejecutarlo el usuario. Ese paso genera `data/session-secret`, sin el cual la API no arranca.
+- Para cambiar `data/qabase.sqlite`, detén la API y usa un snapshot consistente (`.backup` de SQLite o `Connection.backup()`); copiar solo el `.sqlite` mientras exista `-wal` pierde transacciones confirmadas.
+- En este equipo no hay clave SSH ni `sshpass`/`plink`: para operar el VPS desde el agente, instala `paramiko` en `%TEMP%` y no persistas credenciales en el repo.
+- `npm install` con npm 11 reescribe `package-lock.json` (marcadores `peer` y `libc`); revierte ese cambio si no se buscaba actualizar dependencias.
