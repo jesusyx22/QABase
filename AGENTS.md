@@ -76,6 +76,16 @@ Reglas:
 - Si el worker NaN también queda limitado, el coordinador continúa y deja constancia en el relevo.
 - No usar modelos pagos alternativos como fallback; el fallback acordado es `nan/deepseek-v4-flash`.
 
+### Estrategia de paralelización
+
+- Por defecto, 2–3 agentes en total: coordinador, implementador y revisor.
+- Módulos cross-layer grandes: máximo 4 agentes (coordinador, backend, UI y tests); la revisión va después de integrar.
+- Cambios pequeños o ambiguos: un solo agente; no paralelizar decisiones.
+- Contrato primero: los tipos de request/response viven en `packages/shared` antes de repartir el trabajo; la UI puede mockear el API.
+- Cada agente ejecuta typecheck y tests de su área; `npm run verify` se ejecuta una vez al integrar.
+- Un dueño por archivo compartido; si dos agentes lo necesitan, lo integra el coordinador.
+- Un revisor por área, distinto al implementador; no se revisa todo con todos.
+
 ## Dónde está la verdad
 
 - Producto y reglas: `docs/product/qabase-reglas-de-negocio.md`

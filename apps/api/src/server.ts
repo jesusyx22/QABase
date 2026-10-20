@@ -12,6 +12,7 @@ import type { LoginThrottle } from './core/security/throttle'
 import { registerAccountRoutes } from './routes/account'
 import { registerAccessAssignmentRoutes } from './routes/access-assignments'
 import { registerAccessRoutes } from './routes/accesses'
+import { registerProxyRoutes } from './routes/proxies'
 import { registerHelpdeskRoutes } from './routes/helpdesk'
 import { registerPersonalRoutes } from './routes/personal'
 import { registerRecordRoutes } from './routes/records'
@@ -139,6 +140,8 @@ export async function buildServer(options: ServerOptions): Promise<FastifyInstan
     db: options.db,
     clock: options.clock,
   })
+
+  registerProxyRoutes(app, { db: options.db, clock: options.clock })
 
   if (hasWebBuild) {
     await app.register(fastifyStatic, { root: options.webDistPath, wildcard: false })

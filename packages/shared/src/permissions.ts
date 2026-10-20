@@ -66,6 +66,16 @@ export const PERMISSIONS = [
     description:
       'Crear, editar, activar, desactivar y consultar el historial de accesos.',
   },
+  {
+    key: 'proxies.ver',
+    label: 'Ver proxies',
+    description: 'Consultar el catálogo de proxies publicados.',
+  },
+  {
+    key: 'proxies.gestionar',
+    label: 'Gestionar proxies',
+    description: 'Configurar el puente y gestionar proxies publicados.',
+  },
 ] as const
 
 export type PermissionKey = (typeof PERMISSIONS)[number]['key']

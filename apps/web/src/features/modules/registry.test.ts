@@ -17,4 +17,17 @@ describe('registro de módulos', () => {
       'accesses',
     )
   })
+
+  it('ubica Proxies en Principal y lo muestra con proxies.ver', () => {
+    const proxies = MODULES.find((module) => module.id === 'proxies')
+    expect(proxies?.group).toBe('principal')
+    expect(proxies?.path).toBe('proxies')
+    expect(proxies?.permission).toBe('proxies.ver')
+    expect(visibleModules(['proxies.ver']).map((module) => module.id)).toContain(
+      'proxies',
+    )
+    expect(visibleModules([]).map((module) => module.id)).not.toContain(
+      'proxies',
+    )
+  })
 })

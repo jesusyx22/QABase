@@ -7,6 +7,7 @@
 
 export * from './access-assignments'
 export * from './permissions'
+export type * from './proxies'
 export * from './session'
 export * from './validation'
 

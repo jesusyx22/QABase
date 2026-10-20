@@ -65,6 +65,19 @@ export const MODULES: ModuleDefinition[] = [
     ),
   },
   {
+    id: 'proxies',
+    path: 'proxies',
+    label: 'Proxies',
+    group: 'principal',
+    description: 'Catálogo de accesos publicados mediante reverse proxy.',
+    permission: 'proxies.ver' as PermissionKey,
+    component: lazy(() =>
+      import('@/pages/ProxiesPage').then((module) => ({
+        default: module.ProxiesPage,
+      })),
+    ),
+  },
+  {
     id: 'users',
     path: 'usuarios',
     label: 'Usuarios',
