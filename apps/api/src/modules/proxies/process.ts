@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { connect } from 'node:net'
+import { connect, createServer } from 'node:net'
 import { promisify } from 'node:util'
 import type { ProxyHealth, ProxyStatus } from '@qabase/shared'
 import type { PortRow, RuntimeRow, ServiceRow } from './repository'
@@ -24,6 +24,17 @@ export interface ProcessInspector {
   listListeners(ports: readonly number[]): Promise<PortListener[]>
   isProcessAlive(pid: number): Promise<boolean>
   describeProcess(pid: number): Promise<ProcessInfo | null>
+  canBindPort(port: number): Promise<boolean>
+}
+
+export function canBindPort(port: number, host = '0.0.0.0'): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = createServer()
+    server.once('error', () => resolve(false))
+    server.listen({ port, host, exclusive: true }, () => {
+      server.close(() => resolve(true))
+    })
+  })
 }
 
 export type ServiceRuntime = {
@@ -139,6 +150,9 @@ export function createSystemProcessInspector(): ProcessInspector {
         return (error as NodeJS.ErrnoException).code === 'EPERM'
       }
     },
+    async canBindPort(port) {
+      return canBindPort(port)
+    },
     async describeProcess(pid) {
       if (!Number.isInteger(pid) || pid <= 0) {
         return null
@@ -208,12 +222,22 @@ export type InspectServiceInput = {
   alive: boolean
   now: Date
   healthCheck: (port: number, path: string) => Promise<boolean>
+  canBindPort: (port: number) => Promise<boolean>
 }
 
 export async function inspectService(
   input: InspectServiceInput,
 ): Promise<ServiceRuntime> {
-  const { service, ports, runtime, listeners, alive, now, healthCheck } = input
+  const {
+    service,
+    ports,
+    runtime,
+    listeners,
+    alive,
+    now,
+    healthCheck,
+    canBindPort,
+  } = input
   const expectedPorts = new Set(ports.map((row) => row.port))
   const serviceListeners = listeners.filter((listener) =>
     expectedPorts.has(listener.port),
@@ -270,13 +294,37 @@ export async function inspectService(
 
   if (nodeListeners.length === 0) {
     const blocker = serviceListeners[0]!
+    const startedAt = runtime?.startedAt ?? null
+    if (runtime?.pid && alive && startedAt !== null) {
+      const elapsed = now.getTime() - Date.parse(startedAt)
+      if (Number.isFinite(elapsed) && elapsed >= 0 && elapsed < 15000) {
+        return {
+          status: 'starting',
+          pid: runtime.pid,
+          managed: runtime.startedByQabase === 1,
+          health: 'skipped',
+          detail: 'El proceso está arrancando.',
+          startedAt,
+        }
+      }
+    }
+    if (await canBindPort(blocker.port)) {
+      return {
+        status: 'stopped',
+        pid: null,
+        managed: false,
+        health: 'skipped',
+        detail: null,
+        startedAt,
+      }
+    }
     return {
       status: 'conflict',
       pid: blocker.pid > 0 ? blocker.pid : null,
       managed: false,
       health: 'skipped',
       detail: `El puerto ${blocker.port} lo ocupa ${blocker.processName || 'un proceso no identificado'}.`,
-      startedAt: runtime?.startedAt ?? null,
+      startedAt,
     }
   }
 

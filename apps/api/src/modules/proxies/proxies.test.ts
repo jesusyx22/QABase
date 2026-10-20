@@ -76,13 +76,19 @@ function nodeListener(
   }
 }
 
-function inspectorWith(listeners: PortListener[]): ProcessInspector {
+function inspectorWith(
+  listeners: PortListener[],
+  canBind = true,
+): ProcessInspector {
   return {
     async listListeners() {
       return listeners
     },
     async isProcessAlive() {
       return true
+    },
+    async canBindPort() {
+      return canBind
     },
     async describeProcess(pid) {
       return {
@@ -102,6 +108,9 @@ function mutableInspector(initial: PortListener[] = []) {
         return listeners
       },
       async isProcessAlive() {
+        return true
+      },
+      async canBindPort() {
         return true
       },
       async describeProcess(pid) {
@@ -298,15 +307,18 @@ describe('estado de servicios', () => {
     ).toBe(true)
 
     const conflict = await listProxies(db, {
-      inspector: inspectorWith([
-        {
-          port: 8081,
-          address: '0.0.0.0',
-          pid: 99,
-          processName: 'com.docker.backend.exe',
-          commandLine: '',
-        },
-      ]),
+      inspector: inspectorWith(
+        [
+          {
+            port: 8081,
+            address: '0.0.0.0',
+            pid: 99,
+            processName: 'com.docker.backend.exe',
+            commandLine: '',
+          },
+        ],
+        false,
+      ),
       now,
     })
     expect(
@@ -463,6 +475,40 @@ describe('operación de servicios', () => {
     expect(controller.stopped).toEqual([10000])
   })
 
+  it('permite iniciar si Docker/WSL espejan el puerto en IPv6 pero IPv4 está libre', async () => {
+    const db = await setup()
+    const dir = manifestsDir({ demo: baseManifest })
+    syncProxyCatalog(db, dir, now)
+    const logs = mkdtempSync(join(tmpdir(), 'qabase-logs-'))
+    const inspector = mutableInspector([
+      {
+        port: 9000,
+        address: '::',
+        pid: 31164,
+        processName: 'wslrelay.exe',
+        commandLine: '',
+      },
+    ])
+    const controller = fakeController(
+      () => inspector.set([nodeListener(9000, 'demo', 'proxy.js')]),
+      () => inspector.set([]),
+    )
+    const options = {
+      proxiesPath: dir,
+      logsPath: logs,
+      inspector: inspector.inspector,
+      controller,
+      healthCheck: async () => true,
+      now,
+    }
+    const service = (
+      await listProxies(db, { inspector: inspector.inspector, now })
+    ).services[0]!
+    const started = await startProxy(db, actor, service.id, options)
+    expect(started.runtime.status).toBe('active')
+    expect(controller.started).toHaveLength(1)
+  })
+
   it('serializa inicios concurrentes y no duplica procesos', async () => {
     const db = await setup()
     const dir = manifestsDir({ demo: baseManifest })
@@ -514,6 +560,9 @@ describe('operación de servicios', () => {
         return []
       },
       async isProcessAlive() {
+        return true
+      },
+      async canBindPort() {
         return true
       },
       async describeProcess(pid: number) {

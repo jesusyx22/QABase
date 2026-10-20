@@ -11,14 +11,17 @@ puertos, monitoreo, arranque/parada manual y logs, sin arranque automático.
 
 - Rama **`feat/proxies-servicios`**, publicada en `origin`; el trabajo de esta
   sesión está commiteado y pusheado.
-- `npm run verify` en verde en Windows: 45 archivos, **338 tests**, typecheck,
+- `npm run verify` en verde en Windows: 45 archivos, **339 tests**, typecheck,
   lint y build.
 - Migración `010-proxy-services` aplicada en la base local.
 - Catálogo sincronizado desde `scripts/proxies/`: GitLab, Mantis BT y Proxy
   Sentinel, con 4 rutas y 4 puertos.
 - Estado real verificado: los tres aparecen **Activo**; Sentinel con health UP.
-  **Mantis ya está gestionado por QABase** (`managed=true`, PID 46116); GitLab y
-  Sentinel siguen como procesos externos.
+  **GitLab (PID 27360) y Mantis (PID 28952) ya están gestionados por QABase**
+  (`managed=true`); solo Sentinel sigue como proceso externo.
+- GitLab comparte el puerto 8081 con espejos IPv6 de Docker/WSL. El estado usa
+  `canBindPort` para distinguir un espejo de un conflicto real y permitir el
+  arranque en IPv4.
 - Los proxies usan `.cjs`: el `package.json` raíz es `"type": "module"` y los
   `.js` con `require` fallaban como ESM. El antiguo `runner.js` externo de
   Mantis se retiró para que no reinicie el proceso a espaldas de QABase.
@@ -55,13 +58,13 @@ puertos, monitoreo, arranque/parada manual y logs, sin arranque automático.
 - Auditoría de inicio, parada, reinicio, fallos y cambio de IP global.
 - UI y tests de página con estados, permisos y confirmaciones.
 - Smoke real de arranque/parada con un proxy temporal en el puerto 3999.
-- Prueba real de Mantis: detener el proceso externo, arrancarlo desde QABase,
-  verificar `managed=true`, log limpio y respuestas 302/200.
+- Prueba real de Mantis y GitLab: detener sus procesos externos, arrancarlos
+  desde QABase, verificar `managed=true` y respuestas 302/200.
 
 ## Pendiente
 
-- Repetir con GitLab y Sentinel el mismo cambio a `managed=true`; hacerlo fuera
-  de horario de uso. Mantis ya está gestionado.
+- Repetir con Sentinel el cambio a `managed=true`; GitLab y Mantis ya están
+  gestionados.
 - Validar la pantalla en navegador y el aviso de proceso externo.
 - No volver a arrancar el antiguo `runner.js` de Mantis mientras QABase gestione
   el servicio.
@@ -85,7 +88,7 @@ puertos, monitoreo, arranque/parada manual y logs, sin arranque automático.
 ```text
 npm run verify
 Test Files  45 passed (45)
-Tests       338 passed (338)
+Tests       339 passed (339)
 typecheck, lint y build en verde
 ```
 

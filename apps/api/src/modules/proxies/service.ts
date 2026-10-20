@@ -174,6 +174,7 @@ export async function listProxies(
       alive: alive.get(service.id) ?? false,
       now,
       healthCheck,
+      canBindPort: (port) => inspector.canBindPort(port),
     })
     views.push({
       id: service.id,
@@ -352,17 +353,28 @@ async function startProxyUnlocked(
   const listeners = await options.inspector.listListeners(
     ports.map((row) => row.port),
   )
+  const node = listeners.find(isNodeListener)
+  if (node) {
+    throw conflict('El servicio ya está activo.')
+  }
   if (listeners.length > 0) {
-    const node = listeners.find(isNodeListener)
-    if (node) {
-      throw conflict('El servicio ya está activo.')
+    let blockedPort: number | null = null
+    for (const row of ports) {
+      if (!(await options.inspector.canBindPort(row.port))) {
+        blockedPort = row.port
+        break
+      }
     }
-    const blocker = listeners[0]!
-    throw conflict(
-      `El puerto ${blocker.port} está ocupado por ${
-        blocker.processName || 'otro proceso'
-      }.`,
-    )
+    if (blockedPort !== null) {
+      const blocker = listeners.find(
+        (listener) => listener.port === blockedPort,
+      )
+      throw conflict(
+        `El puerto ${blockedPort} está ocupado por ${
+          blocker?.processName || 'otro proceso'
+        }.`,
+      )
+    }
   }
 
   const runtime = findRuntime(db, id)

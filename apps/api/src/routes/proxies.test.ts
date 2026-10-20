@@ -134,6 +134,9 @@ async function createHarness() {
     async isProcessAlive() {
       return true
     },
+    async canBindPort() {
+      return true
+    },
     async describeProcess(pid) {
       return {
         pid,
