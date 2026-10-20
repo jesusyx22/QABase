@@ -2,7 +2,8 @@ const http = require('http');
 
 const TARGET_HOST = '10.20.22.50';
 const TARGET_PORT = 80;
-const PORTS = [80, 8080]; // Listen on both 80 and 8080
+const cliPorts = process.argv.slice(2).map(p => parseInt(p, 10)).filter(p => !isNaN(p));
+const PORTS = cliPorts.length > 0 ? cliPorts : [80, 8080];
 
 function requestHandler(clientReq, clientRes) {
     const clientIp = clientReq.socket.remoteAddress || 'unknown';

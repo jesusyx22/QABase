@@ -183,6 +183,15 @@ describe('catálogo de servicios de proxy', () => {
 
     const result = syncProxyCatalog(db, root, now)
     expect(result).toEqual({ services: 3, routes: 4, ports: 4 })
+    expect(
+      db
+        .prepare('SELECT slug, entry FROM proxy_services ORDER BY slug')
+        .all(),
+    ).toEqual([
+      { slug: 'gitlab', entry: 'proxy.cjs' },
+      { slug: 'mantis', entry: 'proxy.cjs' },
+      { slug: 'sentinel', entry: 'server.cjs' },
+    ])
 
     const response = await listProxies(db, {
       inspector: inspectorWith([]),
@@ -274,10 +283,10 @@ describe('estado de servicios', () => {
 
     const active = await listProxies(db, {
       inspector: inspectorWith([
-        nodeListener(8081, 'gitlab', 'proxy.js'),
-        nodeListener(80, 'mantis', 'proxy.js'),
-        nodeListener(8080, 'mantis', 'proxy.js'),
-        nodeListener(3500, 'sentinel', 'server.js'),
+        nodeListener(8081, 'gitlab', 'proxy.cjs'),
+        nodeListener(80, 'mantis', 'proxy.cjs'),
+        nodeListener(8080, 'mantis', 'proxy.cjs'),
+        nodeListener(3500, 'sentinel', 'server.cjs'),
       ]),
       healthCheck: async () => true,
       now,
@@ -307,7 +316,7 @@ describe('estado de servicios', () => {
 
     const healthDown = await listProxies(db, {
       inspector: inspectorWith([
-        nodeListener(3500, 'sentinel', 'server.js'),
+        nodeListener(3500, 'sentinel', 'server.cjs'),
       ]),
       healthCheck: async () => false,
       now,
@@ -429,7 +438,7 @@ describe('operación de servicios', () => {
     const inspector = mutableInspector([
       nodeListener(9000, 'demo', 'proxy.js', false),
     ])
-    const controller = fakeController()
+    const controller = fakeController(undefined, () => inspector.set([]))
     const options = {
       proxiesPath: dir,
       logsPath: logs,

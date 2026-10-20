@@ -1,7 +1,7 @@
 {
   "name": "Proxy Sentinel",
   "environment": "qa",
-  "entry": "server.js",
+  "entry": "server.cjs",
   "ports": [3500],
   "primaryPort": 3500,
   "healthPath": "/bridge-health",

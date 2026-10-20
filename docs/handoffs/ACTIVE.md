@@ -17,7 +17,11 @@ puertos, monitoreo, arranque/parada manual y logs, sin arranque automático.
 - Catálogo sincronizado desde `scripts/proxies/`: GitLab, Mantis BT y Proxy
   Sentinel, con 4 rutas y 4 puertos.
 - Estado real verificado: los tres aparecen **Activo**; Sentinel con health UP.
-  `managed=false` porque siguen siendo procesos iniciados fuera de QABase.
+  **Mantis ya está gestionado por QABase** (`managed=true`, PID 46116); GitLab y
+  Sentinel siguen como procesos externos.
+- Los proxies usan `.cjs`: el `package.json` raíz es `"type": "module"` y los
+  `.js` con `require` fallaban como ESM. El antiguo `runner.js` externo de
+  Mantis se retiró para que no reinicie el proceso a espaldas de QABase.
 - UI Proxies: catálogo, filtros, estado, iniciar/detener/reiniciar con
   confirmación, detalle y últimas 100 líneas de log. Auto-refresh cada 10 s.
 - Permisos: `proxies.ver` para los tres roles, `proxies.operar` para
@@ -51,12 +55,16 @@ puertos, monitoreo, arranque/parada manual y logs, sin arranque automático.
 - Auditoría de inicio, parada, reinicio, fallos y cambio de IP global.
 - UI y tests de página con estados, permisos y confirmaciones.
 - Smoke real de arranque/parada con un proxy temporal en el puerto 3999.
+- Prueba real de Mantis: detener el proceso externo, arrancarlo desde QABase,
+  verificar `managed=true`, log limpio y respuestas 302/200.
 
 ## Pendiente
 
-- Probar el flujo real: detener los procesos externos y arrancarlos desde
-  QABase para que pasen a `managed=true`. Hacerlo fuera de horario de uso.
+- Repetir con GitLab y Sentinel el mismo cambio a `managed=true`; hacerlo fuera
+  de horario de uso. Mantis ya está gestionado.
 - Validar la pantalla en navegador y el aviso de proceso externo.
+- No volver a arrancar el antiguo `runner.js` de Mantis mientras QABase gestione
+  el servicio.
 - Decidir si se añade arranque automático en una rama posterior.
 
 ## Archivos clave

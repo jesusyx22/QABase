@@ -50,7 +50,7 @@ export default tseslint.config(
   },
   {
     // Proxies ejecutables: son CommonJS puro y corren fuera del build de TS.
-    files: ['scripts/proxies/**/*.js'],
+    files: ['scripts/proxies/**/*.{js,cjs}'],
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: 'commonjs',

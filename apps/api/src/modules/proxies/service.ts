@@ -267,6 +267,21 @@ function servicePorts(db: DatabaseSync, serviceId: number) {
   return listPortRows(db).filter((row) => row.serviceId === serviceId)
 }
 
+async function waitForPortsReleased(
+  inspector: ProcessInspector,
+  ports: readonly number[],
+  timeoutMs = 5000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const listeners = await inspector.listListeners(ports)
+    if (listeners.length === 0) {
+      return
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+}
+
 function markRuntimeError(
   db: DatabaseSync,
   actor: Actor,
@@ -447,6 +462,10 @@ async function stopProxyUnlocked(
       }
       try {
         await options.controller.stop(runtime.pid)
+        await waitForPortsReleased(
+          options.inspector,
+          ports.map((row) => row.port),
+        )
       } catch (error) {
         const message =
           error instanceof Error
@@ -502,6 +521,10 @@ async function stopProxyUnlocked(
 
   try {
     await options.controller.stop(node.pid)
+    await waitForPortsReleased(
+      options.inspector,
+      ports.map((row) => row.port),
+    )
   } catch (error) {
     const message =
       error instanceof Error ? error.message : 'No se pudo detener el proceso.'

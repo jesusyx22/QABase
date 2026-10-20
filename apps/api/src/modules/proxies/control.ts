@@ -1,5 +1,6 @@
 import { execFile, spawn } from 'node:child_process'
 import {
+  appendFileSync,
   closeSync,
   existsSync,
   fstatSync,
@@ -84,6 +85,10 @@ export function createSystemProcessController(): ProxyProcessController {
       mkdirSync(input.serviceDir, { recursive: true })
       mkdirSync(dirname(input.logFile), { recursive: true })
       rotateLog(input.logFile)
+      appendFileSync(
+        input.logFile,
+        `\n=== ${new Date().toISOString()} ${input.entry} ===\n`,
+      )
 
       const logFd = openSync(input.logFile, 'a')
       const entryPath = join(input.serviceDir, input.entry)

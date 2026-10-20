@@ -120,6 +120,8 @@ Cada servicio vive en `scripts/proxies/<slug>/` y declara `service.json`:
 - Sentinel se reimplementa con `http` nativo para no introducir Express ni
   dependencias npm; conserva las dos rutas, CORS y `/bridge-health`. GitLab y
   Mantis se copian tal cual, sin dependencias externas.
+- Los ejecutables usan extensión `.cjs` porque el `package.json` raíz declara
+  `"type": "module"`; con `.js`, Node los trata como ESM y `require` falla.
 
 ## Estado
 
