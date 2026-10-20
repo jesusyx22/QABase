@@ -19,8 +19,10 @@ puertos, monitoreo, arranque/parada manual y logs, sin arranque automático.
 - Estado real verificado: los tres aparecen **Activo**, **gestionados por QABase**
   (`managed=true`) y Sentinel con health UP.
 - Los tres escuchan solo en **10.4.24.18**: `proxy_settings.host` se pasa como
-  `BIND_HOST`; el puerto 8081 conserva espejos IPv6 de Docker/WSL, ya ignorados
-  por `canBindPort`.
+  `BIND_HOST`; el puerto 8081 conserva espejos `0.0.0.0`/IPv6 de Docker/WSL, ya
+  ignorados al seleccionar el listener exacto y con `canBindPort`.
+- `GET /api/proxies` bajó de ~3 s a **~125 ms**: la inspección usa `netstat -ano`
+  y PowerShell queda solo para verificar identidad al detener.
 - Cambiar la IP de enlace no reinicia los servicios; hay que reiniciarlos desde
   la UI para aplicar la nueva interfaz.
 - Los proxies usan `.cjs`: el `package.json` raíz es `"type": "module"` y los
@@ -62,6 +64,8 @@ puertos, monitoreo, arranque/parada manual y logs, sin arranque automático.
 - Prueba real de GitLab, Mantis y Sentinel: arrancados desde QABase,
   `managed=true`, enlace en 10.4.24.18 y respuestas 302/200/health UP.
 - La IP global pasó a ser la interfaz de enlace de todos los proxies.
+- Optimización del listado: `netstat -ano`, selección del listener exacto y
+  `canBindPort` para distinguir espejos de Docker/WSL.
 
 ## Pendiente
 

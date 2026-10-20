@@ -31,7 +31,7 @@ import {
   createSystemProcessInspector,
   defaultHealthCheck,
   inspectService,
-  type PortListener,
+  selectRelevantListeners,
   type ProcessInspector,
   type ProxyHealthCheck,
 } from './process'
@@ -238,10 +238,6 @@ async function withServiceLock<T>(
   return run
 }
 
-function isNodeListener(listener: PortListener): boolean {
-  return /^node(\.exe)?$/i.test(listener.processName)
-}
-
 function isManagedCommand(
   service: ServiceRow,
   commandLine: string,
@@ -274,12 +270,13 @@ function servicePorts(db: DatabaseSync, serviceId: number) {
 async function waitForPortsReleased(
   inspector: ProcessInspector,
   ports: readonly number[],
+  bindHost: string,
   timeoutMs = 5000,
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     const listeners = await inspector.listListeners(ports)
-    if (listeners.length === 0) {
+    if (selectRelevantListeners(listeners, bindHost).length === 0) {
       return
     }
     await new Promise((resolve) => setTimeout(resolve, 200))
@@ -357,8 +354,13 @@ async function startProxyUnlocked(
   const listeners = await options.inspector.listListeners(
     ports.map((row) => row.port),
   )
-  const node = listeners.find(isNodeListener)
-  if (node) {
+  const runtime = findRuntime(db, id)
+  const relevant = selectRelevantListeners(
+    listeners,
+    bindHost,
+    runtime?.pid ?? null,
+  )
+  if (relevant.length > 0) {
     throw conflict('El servicio ya está activo.')
   }
   if (listeners.length > 0) {
@@ -381,7 +383,6 @@ async function startProxyUnlocked(
     }
   }
 
-  const runtime = findRuntime(db, id)
   if (
     runtime?.pid &&
     runtime.startedByQabase === 1 &&
@@ -461,11 +462,17 @@ async function stopProxyUnlocked(
   const service = requireService(db, id)
   const ports = servicePorts(db, id)
   const runtime = findRuntime(db, id)
+  const bindHost = getProxySettings(db).host ?? '0.0.0.0'
   const listeners = await options.inspector.listListeners(
     ports.map((row) => row.port),
   )
+  const relevant = selectRelevantListeners(
+    listeners,
+    bindHost,
+    runtime?.pid ?? null,
+  )
 
-  if (listeners.length === 0) {
+  if (relevant.length === 0) {
     if (
       runtime?.pid &&
       runtime.startedByQabase === 1 &&
@@ -482,6 +489,7 @@ async function stopProxyUnlocked(
         await waitForPortsReleased(
           options.inspector,
           ports.map((row) => row.port),
+          bindHost,
         )
       } catch (error) {
         const message =
@@ -519,17 +527,15 @@ async function stopProxyUnlocked(
     return serviceView(db, id, options)
   }
 
-  const node = listeners.find(isNodeListener)
-  if (!node) {
-    const blocker = listeners[0]!
+  const node = relevant[0]!
+  if (node.pid <= 0) {
     throw conflict(
-      `El puerto ${blocker.port} está ocupado por ${
-        blocker.processName || 'otro proceso'
-      }; no se detiene.`,
+      `El puerto ${node.port} está ocupado por un proceso no identificado; no se detiene.`,
     )
   }
 
-  const managed = isManagedCommand(service, node.commandLine)
+  const managed =
+    runtime?.pid === node.pid && runtime.startedByQabase === 1
   if (!managed && !options.confirmExternal) {
     throw conflict(
       'El servicio fue iniciado fuera de QABase. Confirma para detenerlo.',
@@ -541,6 +547,7 @@ async function stopProxyUnlocked(
     await waitForPortsReleased(
       options.inspector,
       ports.map((row) => row.port),
+      bindHost,
     )
   } catch (error) {
     const message =
@@ -602,15 +609,21 @@ export function restartProxy(
 ): Promise<ProxyServiceView> {
   return withServiceLock(id, async () => {
     const ports = servicePorts(db, id)
+    const bindHost = getProxySettings(db).host ?? '0.0.0.0'
     const listeners = await options.inspector.listListeners(
       ports.map((row) => row.port),
     )
     const runtime = findRuntime(db, id)
+    const relevant = selectRelevantListeners(
+      listeners,
+      bindHost,
+      runtime?.pid ?? null,
+    )
     const alive =
       runtime?.pid !== null &&
       runtime?.pid !== undefined &&
       (await options.inspector.isProcessAlive(runtime.pid))
-    if (listeners.length > 0 || alive) {
+    if (relevant.length > 0 || alive) {
       await stopProxyUnlocked(db, actor, id, options)
     }
     const view = await startProxyUnlocked(db, actor, id, options)

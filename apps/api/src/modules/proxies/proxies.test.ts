@@ -64,11 +64,12 @@ function nodeListener(
   slug: string,
   entry: string,
   managed = true,
+  pid = 1000 + port,
 ): PortListener {
   return {
     port,
     address: '0.0.0.0',
-    pid: 1000 + port,
+    pid,
     processName: 'node.exe',
     commandLine: managed
       ? `node C:\\repo\\scripts\\proxies\\${slug}\\${entry}`
@@ -304,14 +305,14 @@ describe('estado de servicios', () => {
     expect(
       active.services.find((service) => service.slug === 'gitlab')?.runtime
         .managed,
-    ).toBe(true)
+    ).toBe(false)
 
     const conflict = await listProxies(db, {
       inspector: inspectorWith(
         [
           {
             port: 8081,
-            address: '0.0.0.0',
+            address: '::',
             pid: 99,
             processName: 'com.docker.backend.exe',
             commandLine: '',
@@ -345,7 +346,10 @@ describe('estado de servicios', () => {
     let seen: { host: string; port: number; path: string } | null = null
     await listProxies(db, {
       inspector: inspectorWith([
-        nodeListener(3500, 'sentinel', 'server.cjs'),
+        {
+          ...nodeListener(3500, 'sentinel', 'server.cjs'),
+          address: '10.4.24.18',
+        },
       ]),
       healthCheck: async (host, port, path) => {
         seen = { host, port, path }
@@ -416,7 +420,8 @@ describe('operación de servicios', () => {
     const logs = mkdtempSync(join(tmpdir(), 'qabase-logs-'))
     const inspector = mutableInspector()
     const controller = fakeController(
-      () => inspector.set([nodeListener(9200, 'demo', 'proxy.js')]),
+      () =>
+        inspector.set([nodeListener(9200, 'demo', 'proxy.js', true, 4242)]),
       () => inspector.set([]),
     )
     const options = {
@@ -433,6 +438,7 @@ describe('operación de servicios', () => {
 
     const started = await startProxy(db, actor, service.id, options)
     expect(started.runtime.status).toBe('active')
+    expect(started.runtime.managed).toBe(true)
     expect(controller.started[0]).toMatchObject({
       entry: 'proxy.js',
       ports: [9200],
@@ -445,14 +451,13 @@ describe('operación de servicios', () => {
       startProxy(db, actor, service.id, options),
     ).rejects.toThrow(/ya está activo/)
 
-    const stopped = await stopProxy(db, actor, service.id, options)
-    expect(stopped.runtime.status).toBe('stopped')
-    expect(controller.stopped).toEqual([10200])
-
-    inspector.set([nodeListener(9200, 'demo', 'proxy.js')])
     const restarted = await restartProxy(db, actor, service.id, options)
     expect(restarted.runtime.status).toBe('active')
-    expect(controller.stopped).toHaveLength(2)
+    expect(controller.stopped).toEqual([4242])
+
+    const stopped = await stopProxy(db, actor, service.id, options)
+    expect(stopped.runtime.status).toBe('stopped')
+    expect(controller.stopped).toEqual([4242, 4242])
 
     const actions = (
       db

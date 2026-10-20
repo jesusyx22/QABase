@@ -33,6 +33,32 @@ export type ProxyHealthCheck = (
   path: string,
 ) => Promise<boolean>
 
+/**
+ * Un listener cuenta si está enlazado exactamente a la interfaz configurada o
+ * pertenece al proceso que QABase lanzó. Esto evita confundir los espejos
+ * `0.0.0.0`/IPv6 de Docker/WSL con el proxy real.
+ */
+export function selectRelevantListeners(
+  listeners: readonly PortListener[],
+  bindHost: string,
+  runtimePid: number | null = null,
+): PortListener[] {
+  const exact = listeners.filter((listener) => listener.address === bindHost)
+  if (exact.length > 0) {
+    return exact
+  }
+  if (runtimePid !== null) {
+    const managed = listeners.filter((listener) => listener.pid === runtimePid)
+    if (managed.length > 0) {
+      return managed
+    }
+  }
+  if (bindHost === '0.0.0.0') {
+    return listeners.filter((listener) => !listener.address.includes(':'))
+  }
+  return []
+}
+
 export function canBindPort(host: string, port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const server = createServer()
@@ -52,26 +78,28 @@ export type ServiceRuntime = {
   startedAt: string | null
 }
 
-const WINDOWS_INSPECT_SCRIPT = (ports: readonly number[]) => `
-$ports = @(${ports.join(',')})
-$conns = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
-  Where-Object { $ports -contains $_.LocalPort })
-$pids = @($conns | Select-Object -ExpandProperty OwningProcess -Unique)
-$procs = @(Get-CimInstance Win32_Process |
-  Where-Object { $pids -contains $_.ProcessId })
-$result = @(foreach ($c in $conns) {
-  $p = $procs | Where-Object { $_.ProcessId -eq $c.OwningProcess } |
-    Select-Object -First 1
-  [pscustomobject]@{
-    port = [int]$c.LocalPort
-    address = [string]$c.LocalAddress
-    pid = [int]$c.OwningProcess
-    processName = [string]$p.Name
-    commandLine = [string]$p.CommandLine
+function parseLocalAddress(
+  value: string,
+): { host: string; port: number } | null {
+  const text = value.trim()
+  if (text === '') {
+    return null
   }
-})
-$result | ConvertTo-Json -Compress
-`
+  const separator = text.lastIndexOf(':')
+  if (separator <= 0) {
+    return null
+  }
+  const rawHost = text.slice(0, separator)
+  const host =
+    rawHost.startsWith('[') && rawHost.endsWith(']')
+      ? rawHost.slice(1, -1)
+      : rawHost
+  const port = Number(text.slice(separator + 1))
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return null
+  }
+  return { host, port }
+}
 
 function probePort(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -90,32 +118,39 @@ function probePort(port: number): Promise<boolean> {
 async function listWindowsListeners(
   ports: readonly number[],
 ): Promise<PortListener[]> {
-  const { stdout } = await execFileAsync(
-    'powershell.exe',
-    [
-      '-NoLogo',
-      '-NoProfile',
-      '-NonInteractive',
-      '-Command',
-      WINDOWS_INSPECT_SCRIPT(ports),
-    ],
-    { timeout: 8000, windowsHide: true, maxBuffer: 1024 * 1024 },
-  )
-  const text = stdout.trim()
-  if (text === '') {
-    return []
+  const { stdout } = await execFileAsync('netstat', ['-ano'], {
+    timeout: 5000,
+    windowsHide: true,
+    maxBuffer: 2 * 1024 * 1024,
+  })
+  const wanted = new Set(ports)
+  const rows: PortListener[] = []
+  for (const line of stdout.split(/\r?\n/)) {
+    const parts = line.trim().split(/\s+/)
+    if (
+      parts.length < 5 ||
+      parts[0] !== 'TCP' ||
+      parts[3] !== 'LISTENING'
+    ) {
+      continue
+    }
+    const local = parseLocalAddress(parts[1]!)
+    if (!local || !wanted.has(local.port)) {
+      continue
+    }
+    const pid = Number(parts[4])
+    if (!Number.isInteger(pid) || pid <= 0) {
+      continue
+    }
+    rows.push({
+      port: local.port,
+      address: local.host,
+      pid,
+      processName: '',
+      commandLine: '',
+    })
   }
-  const parsed = JSON.parse(text) as
-    | PortListener
-    | PortListener[]
-  const rows = Array.isArray(parsed) ? parsed : [parsed]
-  return rows.map((row) => ({
-    port: Number(row.port),
-    address: String(row.address ?? ''),
-    pid: Number(row.pid),
-    processName: String(row.processName ?? ''),
-    commandLine: String(row.commandLine ?? ''),
-  }))
+  return rows
 }
 
 export function createSystemProcessInspector(): ProcessInspector {
@@ -128,7 +163,7 @@ export function createSystemProcessInspector(): ProcessInspector {
         try {
           return await listWindowsListeners(ports)
         } catch {
-          // Si PowerShell falla, se degrada a comprobación de puerto.
+          // Si netstat falla, se degrada a comprobación de puerto.
         }
       }
       const listeners: PortListener[] = []
@@ -298,11 +333,13 @@ export async function inspectService(
     }
   }
 
-  const nodeListeners = serviceListeners.filter((listener) =>
-    /^node(\.exe)?$/i.test(listener.processName),
+  const relevant = selectRelevantListeners(
+    serviceListeners,
+    bindHost,
+    runtime?.pid ?? null,
   )
 
-  if (nodeListeners.length === 0) {
+  if (relevant.length === 0) {
     const blocker = serviceListeners[0]!
     const startedAt = runtime?.startedAt ?? null
     if (runtime?.pid && alive && startedAt !== null) {
@@ -333,21 +370,27 @@ export async function inspectService(
       pid: blocker.pid > 0 ? blocker.pid : null,
       managed: false,
       health: 'skipped',
-      detail: `El puerto ${blocker.port} lo ocupa ${blocker.processName || 'un proceso no identificado'}.`,
+      detail: `El puerto ${blocker.port} está ocupado por ${
+        blocker.processName || `el PID ${blocker.pid}`
+      }.`,
       startedAt,
     }
   }
 
-  const portsWithNode = new Set(nodeListeners.map((item) => item.port))
-  const missing = [...expectedPorts].filter((port) => !portsWithNode.has(port))
+  const portsWithRelevant = new Set(relevant.map((item) => item.port))
+  const missing = [...expectedPorts].filter(
+    (port) => !portsWithRelevant.has(port),
+  )
   if (missing.length > 0) {
     const startedAt = runtime?.startedAt ?? null
     const elapsed =
-      startedAt === null ? Number.POSITIVE_INFINITY : now.getTime() - Date.parse(startedAt)
+      startedAt === null
+        ? Number.POSITIVE_INFINITY
+        : now.getTime() - Date.parse(startedAt)
     if (Number.isFinite(elapsed) && elapsed >= 0 && elapsed < 15000) {
       return {
         status: 'starting',
-        pid: nodeListeners[0]!.pid > 0 ? nodeListeners[0]!.pid : null,
+        pid: relevant[0]!.pid > 0 ? relevant[0]!.pid : null,
         managed: runtime?.startedByQabase === 1,
         health: 'skipped',
         detail: `Esperando el puerto ${missing[0]}.`,
@@ -355,19 +398,18 @@ export async function inspectService(
       }
     }
     return {
-      status: 'conflict',
-      pid: nodeListeners[0]!.pid > 0 ? nodeListeners[0]!.pid : null,
+      status: 'error',
+      pid: relevant[0]!.pid > 0 ? relevant[0]!.pid : null,
       managed: runtime?.startedByQabase === 1,
       health: 'skipped',
-      detail: `Sin proceso Node en el puerto ${missing[0]}.`,
+      detail: `Sin listener en el puerto ${missing[0]}.`,
       startedAt,
     }
   }
 
-  const listener = nodeListeners[0]!
-  const marker = `scripts/proxies/${service.slug}/${service.entry}`
-  const normalizedCommand = listener.commandLine.replaceAll('\\', '/')
-  const managed = normalizedCommand.includes(marker)
+  const listener = relevant[0]!
+  const managed =
+    runtime?.pid === listener.pid && runtime.startedByQabase === 1
   const primary =
     ports.find((row) => row.isPrimary === 1)?.port ?? ports[0]!.port
 
