@@ -10,7 +10,7 @@ puertos, monitoreo, arranque/parada manual y logs, sin arranque automático.
 ## Estado
 
 - Rama **`feat/proxies-servicios`**, publicada en `origin`; el trabajo de esta
-  sesión está en el árbol local y **sin commit**.
+  sesión está commiteado y pusheado.
 - `npm run verify` en verde en Windows: 45 archivos, **338 tests**, typecheck,
   lint y build.
 - Migración `010-proxy-services` aplicada en la base local.
@@ -37,8 +37,9 @@ puertos, monitoreo, arranque/parada manual y logs, sin arranque automático.
 - QABase lanza `node <entry>` detached; no hay servicio ni tarea de Windows.
 - No hay arranque automático; toda operación es manual y auditada.
 - Un puerto ocupado por otro proceso es conflicto y nunca se mata.
-- Revisión de Codex: se corrigieron spawn asíncrono, concurrencia por servicio,
-  parada durante arranque, lectura de logs, identidad de proceso y catálogo.
+- Revisión de Codex y Agy: se corrigieron spawn asíncrono, concurrencia por
+  servicio, parada durante arranque, lectura de logs, identidad de proceso,
+  catálogo y los cuatro P2 de UI.
 
 ## Hecho
 
@@ -53,8 +54,6 @@ puertos, monitoreo, arranque/parada manual y logs, sin arranque automático.
 
 ## Pendiente
 
-- Revisión independiente final de la UI y del diff completo.
-- Commit y push de la rama (requiere autorización explícita).
 - Probar el flujo real: detener los procesos externos y arrancarlos desde
   QABase para que pasen a `managed=true`. Hacerlo fuera de horario de uso.
 - Validar la pantalla en navegador y el aviso de proceso externo.
