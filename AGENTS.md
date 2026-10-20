@@ -55,6 +55,25 @@ Panel local del equipo de QA para mantener el catálogo de Personal QA, registra
 Antes de afirmar que algo está listo: `npm run verify` y leer la salida.
 Si se toca UI: revisar `DESIGN.md` y cargar la skill `web-design-guidelines`.
 
+## Contexto y handoff
+
+- `docs/handoffs/ACTIVE.md` es el handoff vivo de la sesión.
+- Actualízalo **sin esperar a cerrar la sesión** cuando ocurra un hito:
+  1. Se cierren decisiones de producto/arquitectura o se apruebe/cambie una spec.
+  2. Termine una unidad de implementación, migración o cambio de contrato.
+  3. Pase `npm run verify` o una revisión independiente.
+  4. Se cambie de tarea, módulo o proyecto.
+  5. Se vaya a hacer una pausa larga o el contexto empiece a ser grande.
+- En esos hitos, actualízalo sin pedir confirmación; es parte del cierre del hito.
+- Actualiza solo el delta: objetivo, estado, decisiones nuevas, hecho, pendiente,
+  archivos clave, comandos ejecutados y siguiente paso.
+- No dupliques specs, ADR ni diffs; referéncialos por ruta.
+- No lo actualices en cada turno ni por cambios triviales. Si no hay delta, dilo.
+- Al cerrar la tarea, archiva `ACTIVE.md` como
+  `docs/handoffs/AAAA-MM-DD-<slug>.md`.
+- `learn` es distinto: guarda solo conocimiento no obvio; no lo mezcles con el
+  handoff.
+
 ## Delegación multiagente (Herdr)
 
 Mapa vigente para repartir trabajo sin pisar archivos:
