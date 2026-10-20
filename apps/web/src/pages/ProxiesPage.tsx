@@ -325,7 +325,7 @@ export function ProxiesPage() {
         </CardHeader>
 
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-end gap-3 border-b border-border pb-4">
+          <div className="flex flex-wrap items-start gap-3 border-b border-border pb-4">
             <div className="w-full max-w-sm space-y-1.5">
               <Label htmlFor="proxy-search">Buscar proxies</Label>
               <Input
