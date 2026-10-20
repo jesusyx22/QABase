@@ -311,11 +311,15 @@ describe('ProxiesPage', () => {
     const restart = screen.getByRole('button', {
       name: 'Reiniciar servicio Proxy Sentinel',
     })
+    const detail = screen.getByRole('button', {
+      name: 'Ver detalle de Proxy Sentinel',
+    })
 
     expect(stop.parentElement).toBe(restart.parentElement)
     expect(stop.parentElement).toHaveClass('flex-nowrap')
     expect(stop).toHaveClass('text-danger')
     expect(restart).toHaveClass('text-primary')
+    expect(detail).toHaveClass('text-primary')
   })
 
   it('los badges Inactivo y Acceso inactivo usan estilo neutro/gris (DESIGN.md)', async () => {

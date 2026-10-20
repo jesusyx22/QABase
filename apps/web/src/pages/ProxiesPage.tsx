@@ -651,6 +651,7 @@ export function ProxiesPage() {
                             type="button"
                             variant="ghost"
                             size="icon-xs"
+                            className="text-primary hover:bg-primary/10 hover:text-primary"
                             onClick={() => setSelectedServiceId(service.id)}
                             aria-label={`Ver detalle de ${service.name}`}
                             title="Ver detalle del servicio y logs"
