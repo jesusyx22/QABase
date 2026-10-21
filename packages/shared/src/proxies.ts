@@ -37,6 +37,11 @@ export type ProxyRouteAccess = {
   isActive: boolean
 }
 
+export type ProxyAllowlistEntry = {
+  cidr: string
+  label: string
+}
+
 export type ProxyRoute = {
   id: number
   path: string
@@ -70,7 +75,7 @@ export type ProxyServiceView = {
   isActive: boolean
   routes: ProxyRoute[]
   ports: ProxyPort[]
-  allowlist: string[]
+  allowlist: ProxyAllowlistEntry[]
   runtime: ProxyRuntime
   createdAt: string
   updatedAt: string
@@ -87,7 +92,7 @@ export type UpdateProxySettingsInput = {
 }
 
 export type UpdateProxyAllowlistInput = {
-  cidrs: string[]
+  entries: ProxyAllowlistEntry[]
 }
 
 export type ProxyLogsResponse = {

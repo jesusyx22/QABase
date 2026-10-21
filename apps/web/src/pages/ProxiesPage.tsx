@@ -469,6 +469,7 @@ export function ProxiesPage() {
               <Table aria-hidden="true">
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12 text-center text-xs text-muted-foreground">#</TableHead>
                     <TableHead>Nombre</TableHead>
                     <TableHead>Endpoints</TableHead>
                     <TableHead>Rutas</TableHead>
@@ -480,6 +481,9 @@ export function ProxiesPage() {
                 <TableBody>
                   {SKELETON_ROWS.map((row) => (
                     <TableRow key={row}>
+                      <TableCell className="w-12 text-center">
+                        <Skeleton className="mx-auto h-4 w-4" />
+                      </TableCell>
                       <TableCell>
                         <Skeleton className="h-4 w-28" />
                       </TableCell>
@@ -529,6 +533,7 @@ export function ProxiesPage() {
             <Table aria-label="Catálogo de servicios de proxy">
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12 text-center text-xs text-muted-foreground">#</TableHead>
                   <TableHead>Nombre</TableHead>
                   <TableHead>Endpoints</TableHead>
                   <TableHead>Rutas</TableHead>
@@ -538,7 +543,7 @@ export function ProxiesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredServices.map((service) => {
+                {filteredServices.map((service, index) => {
                   const statusCfg = proxyStatusConfig(service.runtime.status)
                   const isBusy = actionLoadingId === service.id
                   const status = service.runtime.status
@@ -567,6 +572,11 @@ export function ProxiesPage() {
 
                   return (
                     <TableRow key={service.id}>
+                      {/* # */}
+                      <TableCell className="w-12 text-center font-mono text-xs text-muted-foreground tabular-nums align-top">
+                        {index + 1}
+                      </TableCell>
+
                       {/* 1. Nombre */}
                       <TableCell className="font-medium align-top">
                         <div className="space-y-0.5">
@@ -748,7 +758,7 @@ export function ProxiesPage() {
                               {canStop ? (
                                 <Button
                                   type="button"
-                                  variant="destructive"
+                                  variant="outline"
                                   size="xs"
                                   disabled={isBusy}
                                   onClick={() =>
@@ -757,6 +767,7 @@ export function ProxiesPage() {
                                       action: 'stop',
                                     })
                                   }
+                                  className="w-28 border-danger/40 bg-danger/10 text-danger hover:bg-danger/20 hover:text-danger hover:border-danger/60 focus-visible:ring-danger/20"
                                   aria-label={`Detener servicio ${service.name}`}
                                 >
                                   <Power className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
@@ -777,6 +788,7 @@ export function ProxiesPage() {
                                       action: 'restart',
                                     })
                                   }
+                                  className="w-28 border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary hover:border-primary/60 focus-visible:ring-primary/20"
                                   aria-label={`Reiniciar servicio ${service.name}`}
                                 >
                                   <RotateCcw className="mr-1 h-3.5 w-3.5" aria-hidden="true" />

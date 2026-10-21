@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type {
+  ProxyAllowlistEntry,
   ProxyListResponse,
   ProxyLogsResponse,
   ProxyRoute,
@@ -46,7 +47,7 @@ import {
   type ProxyProcessController,
 } from './control'
 import {
-  normalizeAllowlist,
+  normalizeAllowlistEntries,
   validateHost,
   validateVersion,
 } from './validation'
@@ -202,7 +203,7 @@ export async function listProxies(
       ports: servicePorts,
       allowlist: allowlists
         .filter((row) => row.serviceId === service.id)
-        .map((row) => row.cidr),
+        .map((row) => ({ cidr: row.cidr, label: row.label })),
       runtime: serviceRuntime,
       createdAt: service.createdAt,
       updatedAt: service.updatedAt,
@@ -691,17 +692,17 @@ export async function updateProxyAllowlist(
   db: DatabaseSync,
   actor: Actor,
   id: number,
-  cidrs: string[],
+  entries: ProxyAllowlistEntry[],
   options: ProxyAllowlistOptions,
 ): Promise<ProxyServiceView> {
   const service = requireService(db, id)
   if (service.protocol !== 'tcp') {
     throw invalidInput('La allowlist solo aplica a servicios TCP.')
   }
-  const normalized = normalizeAllowlist(cidrs)
+  const normalized = normalizeAllowlistEntries(entries)
   const before = listAllowlistRows(db)
     .filter((row) => row.serviceId === id)
-    .map((row) => row.cidr)
+    .map((row) => ({ cidr: row.cidr, label: row.label }))
   inTransaction(db, () => {
     replaceAllowlist(db, id, normalized)
     audit(
@@ -715,7 +716,10 @@ export async function updateProxyAllowlist(
       { allowlist: normalized },
     )
   })
-  writeAllowlistFile(allowlistPathFor(options.logsPath, service.slug), normalized)
+  writeAllowlistFile(
+    allowlistPathFor(options.logsPath, service.slug),
+    normalized.map((entry) => entry.cidr),
+  )
   return serviceView(db, id, options)
 }
 

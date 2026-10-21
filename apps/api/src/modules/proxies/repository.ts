@@ -165,12 +165,13 @@ export function findRouteAccess(
 export type AllowlistRow = {
   serviceId: number
   cidr: string
+  label: string
 }
 
 export function listAllowlistRows(db: DatabaseSync): AllowlistRow[] {
   return db
     .prepare(
-      `SELECT service_id AS serviceId, cidr
+      `SELECT service_id AS serviceId, cidr, label
          FROM proxy_allowlist
         ORDER BY service_id, cidr`,
     )
@@ -180,14 +181,14 @@ export function listAllowlistRows(db: DatabaseSync): AllowlistRow[] {
 export function replaceAllowlist(
   db: DatabaseSync,
   serviceId: number,
-  cidrs: string[],
+  entries: Array<{ cidr: string; label: string }>,
 ): void {
   db.prepare('DELETE FROM proxy_allowlist WHERE service_id = ?').run(serviceId)
   const insert = db.prepare(
-    'INSERT INTO proxy_allowlist (service_id, cidr) VALUES (?, ?)',
+    'INSERT INTO proxy_allowlist (service_id, cidr, label) VALUES (?, ?, ?)',
   )
-  for (const cidr of cidrs) {
-    insert.run(serviceId, cidr)
+  for (const entry of entries) {
+    insert.run(serviceId, entry.cidr, entry.label)
   }
 }
 

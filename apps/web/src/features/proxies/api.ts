@@ -1,4 +1,5 @@
 import type {
+  ProxyAllowlistEntry,
   ProxyEnvironment,
   ProxyHealth,
   ProxyListResponse,
@@ -17,6 +18,7 @@ import type {
 import { apiFetch } from '@/lib/api'
 
 export type {
+  ProxyAllowlistEntry,
   ProxyEnvironment,
   ProxyHealth,
   ProxyListResponse,
@@ -48,11 +50,11 @@ export function updateProxySettings(
 
 export function requestUpdateProxyAllowlist(
   id: number,
-  cidrs: string[],
+  entries: ProxyAllowlistEntry[],
 ): Promise<ProxyServiceView> {
   return apiFetch<ProxyServiceView>(`/api/proxies/${id}/allowlist`, {
     method: 'PATCH',
-    body: JSON.stringify({ cidrs }),
+    body: JSON.stringify({ entries }),
   })
 }
 

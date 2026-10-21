@@ -1,4 +1,5 @@
 import { isIPv4 } from 'node:net'
+import type { ProxyAllowlistEntry } from '@qabase/shared'
 import { invalidInput } from '../../core/errors'
 
 export { validateEntityId, validateVersion } from '../access-assignments/validation'
@@ -62,12 +63,42 @@ export function normalizeCidr(value: string): string {
   return `${octets.join('.')}/${prefix}`
 }
 
-export function normalizeAllowlist(values: string[]): string[] {
-  if (!Array.isArray(values)) {
-    throw invalidInput('La allowlist debe ser una lista de IPs o CIDR.')
+export function normalizeAllowlistEntries(
+  entries: ProxyAllowlistEntry[],
+): ProxyAllowlistEntry[] {
+  if (!Array.isArray(entries)) {
+    throw invalidInput('La allowlist debe ser una lista de entradas.')
   }
-  if (values.length > 100) {
+  if (entries.length > 100) {
     throw invalidInput('La allowlist no puede superar 100 entradas.')
   }
-  return [...new Set(values.map((value) => normalizeCidr(value)))]
+  const seen = new Set<string>()
+  const normalized: ProxyAllowlistEntry[] = []
+  for (const entry of entries) {
+    if (typeof entry !== 'object' || entry === null) {
+      throw invalidInput('Cada entrada de la allowlist debe ser un objeto.')
+    }
+    const cidr = normalizeCidr(entry.cidr)
+    if (seen.has(cidr)) {
+      throw invalidInput(`La IP o CIDR ${cidr} está repetido en la allowlist.`)
+    }
+    seen.add(cidr)
+    if (typeof entry.label !== 'string') {
+      throw invalidInput('Cada entrada de la allowlist necesita un nombre.')
+    }
+    const label = entry.label.trim()
+    if (label.length < 1 || label.length > 80) {
+      throw invalidInput('El nombre debe tener entre 1 y 80 caracteres.')
+    }
+    if (
+      [...label].some((character) => {
+        const code = character.charCodeAt(0)
+        return code < 32 || code === 127
+      })
+    ) {
+      throw invalidInput('El nombre contiene caracteres no válidos.')
+    }
+    normalized.push({ cidr, label })
+  }
+  return normalized
 }

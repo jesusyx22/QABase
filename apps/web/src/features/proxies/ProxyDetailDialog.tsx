@@ -189,13 +189,13 @@ export function ProxyDetailDialog({
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-1.5 pt-1">
-                    {service.allowlist.map((cidr) => (
+                    {service.allowlist.map((entry) => (
                       <Badge
-                        key={cidr}
+                        key={entry.cidr}
                         variant="outline"
                         className="font-mono text-xs tabular-nums text-foreground"
                       >
-                        {cidr}
+                        {entry.label} — {entry.cidr}
                       </Badge>
                     ))}
                   </div>

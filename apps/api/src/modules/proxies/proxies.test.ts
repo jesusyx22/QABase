@@ -399,12 +399,15 @@ describe('estado de servicios', () => {
       db,
       actor,
       mongo.id,
-      ['10.4.24.18', '10.4.24.0/24', '10.4.24.18'],
+      [
+        { cidr: '10.4.24.18', label: 'Admin' },
+        { cidr: '10.4.24.0/24', label: 'Equipo QA' },
+      ],
       { logsPath: logs, inspector: inspectorWith([]), now },
     )
     expect(updated.allowlist).toEqual([
-      '10.4.24.0/24',
-      '10.4.24.18/32',
+      { cidr: '10.4.24.0/24', label: 'Equipo QA' },
+      { cidr: '10.4.24.18/32', label: 'Admin' },
     ])
     const file = join(base, 'proxies', 'mongodb-qa.allowlist.json')
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({
@@ -416,8 +419,34 @@ describe('estado de servicios', () => {
       )
       .get() as { action: string; after_json: string }
     expect(JSON.parse(auditRow.after_json)).toEqual({
-      allowlist: ['10.4.24.18/32', '10.4.24.0/24'],
+      allowlist: [
+        { cidr: '10.4.24.18/32', label: 'Admin' },
+        { cidr: '10.4.24.0/24', label: 'Equipo QA' },
+      ],
     })
+
+    await expect(
+      updateProxyAllowlist(
+        db,
+        actor,
+        mongo.id,
+        [
+          { cidr: '10.4.24.18', label: 'Admin' },
+          { cidr: '10.4.24.18/32', label: 'Duplicado' },
+        ],
+        { logsPath: logs, inspector: inspectorWith([]), now },
+      ),
+    ).rejects.toThrow(/repetido/i)
+
+    await expect(
+      updateProxyAllowlist(
+        db,
+        actor,
+        mongo.id,
+        [{ cidr: '10.4.24.18', label: '   ' }],
+        { logsPath: logs, inspector: inspectorWith([]), now },
+      ),
+    ).rejects.toThrow(/nombre/i)
 
     for (const invalid of [
       '::1',
@@ -426,11 +455,17 @@ describe('estado de servicios', () => {
       '10.4.24.0/33',
     ]) {
       await expect(
-        updateProxyAllowlist(db, actor, mongo.id, [invalid], {
-          logsPath: logs,
-          inspector: inspectorWith([]),
-          now,
-        }),
+        updateProxyAllowlist(
+          db,
+          actor,
+          mongo.id,
+          [{ cidr: invalid, label: 'Inválido' }],
+          {
+            logsPath: logs,
+            inspector: inspectorWith([]),
+            now,
+          },
+        ),
       ).rejects.toThrow(/no es válido|prefijo/i)
     }
 
@@ -438,11 +473,17 @@ describe('estado de servicios', () => {
       await listProxies(db, { inspector: inspectorWith([]), now })
     ).services.find((service) => service.slug === 'gitlab')!
     await expect(
-      updateProxyAllowlist(db, actor, gitlab.id, ['10.4.24.18'], {
-        logsPath: logs,
-        inspector: inspectorWith([]),
-        now,
-      }),
+      updateProxyAllowlist(
+        db,
+        actor,
+        gitlab.id,
+        [{ cidr: '10.4.24.18', label: 'Admin' }],
+        {
+          logsPath: logs,
+          inspector: inspectorWith([]),
+          now,
+        },
+      ),
     ).rejects.toThrow(/solo aplica a servicios TCP/i)
 
     const cleared = await updateProxyAllowlist(db, actor, mongo.id, [], {
@@ -478,10 +519,12 @@ describe('estado de servicios', () => {
       db,
       actor,
       service.id,
-      ['10.4.24.18'],
+      [{ cidr: '10.4.24.18', label: 'Admin' }],
       { logsPath: logs, inspector: inspectorWith([]), now },
     )
-    expect(updated.allowlist).toEqual(['10.4.24.18/32'])
+    expect(updated.allowlist).toEqual([
+      { cidr: '10.4.24.18/32', label: 'Admin' },
+    ])
 
     await startProxy(db, actor, service.id, {
       proxiesPath: dir,

@@ -20,6 +20,8 @@ transparente, con control de IPs de origen y sin almacenar credenciales.
 4. La allowlist se escribe en un archivo local que el proxy lee por conexión;
    así los cambios aplican sin reiniciar.
 5. Vacía significa denegar todo. Se admiten IPv4 y CIDR; no hostnames ni IPv6.
+   Cada entrada lleva un nombre obligatorio para identificar al responsable; el
+   nombre es metadata y no se envía al proxy.
 6. No se guardan URI, usuario, contraseña ni base de datos en QABase.
 7. El primer servicio es `mongodb-qa` en `10.4.24.18:27017` hacia
    `10.5.83.84:27017`, QA, con allowlist inicial `10.4.24.18/32`.

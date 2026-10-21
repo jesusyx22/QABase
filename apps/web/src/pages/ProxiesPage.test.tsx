@@ -192,7 +192,10 @@ const sampleServiceMongo: ProxyServiceView = {
   name: 'MongoDB QA',
   environment: 'qa',
   protocol: 'tcp',
-  allowlist: ['10.4.24.0/24', '192.168.1.50'],
+  allowlist: [
+    { cidr: '10.4.24.0/24', label: 'Admin' },
+    { cidr: '192.168.1.50', label: 'Desarrollador' },
+  ],
   healthPath: null,
   isActive: true,
   createdAt: '2026-10-18T00:00:00.000Z',
@@ -625,8 +628,8 @@ describe('ProxiesPage', () => {
 
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText(/IPs autorizadas \(2\)/i)).toBeInTheDocument()
-    expect(within(dialog).getByText('10.4.24.0/24')).toBeInTheDocument()
-    expect(within(dialog).getByText('192.168.1.50')).toBeInTheDocument()
+    expect(within(dialog).getByText('Admin — 10.4.24.0/24')).toBeInTheDocument()
+    expect(within(dialog).getByText('Desarrollador — 192.168.1.50')).toBeInTheDocument()
   })
 
   it('en servicios TCP con allowlist vacía muestra el aviso sin IPs autorizadas', async () => {
@@ -646,10 +649,13 @@ describe('ProxiesPage', () => {
     ).toBeInTheDocument()
   })
 
-  it('permite a Administrador editar la allowlist y llama a requestUpdateProxyAllowlist', async () => {
+  it('permite a Administrador editar la allowlist por filas y llama a requestUpdateProxyAllowlist', async () => {
     const updatedMongo: ProxyServiceView = {
       ...sampleServiceMongo,
-      allowlist: ['10.0.0.1', '10.0.0.2'],
+      allowlist: [
+        { cidr: '10.4.24.0/24', label: 'Admin' },
+        { cidr: '10.0.0.1', label: 'Admin' },
+      ],
     }
     requestUpdateProxyAllowlistMock.mockResolvedValue(updatedMongo)
 
@@ -675,31 +681,188 @@ describe('ProxiesPage', () => {
     })
     expect(allowlistDialog).toBeInTheDocument()
 
-    const textarea = screen.getByLabelText(/direcciones ip o rangos cidr/i)
+    // Filas iniciales
+    const cidrInput1 = screen.getByLabelText('IP o CIDR 1') as HTMLInputElement
+    const labelInput1 = screen.getByLabelText('Nombre 1') as HTMLInputElement
+    const cidrInput2 = screen.getByLabelText('IP o CIDR 2') as HTMLInputElement
+    const labelInput2 = screen.getByLabelText('Nombre 2') as HTMLInputElement
+
+    expect(cidrInput1.value).toBe('10.4.24.0/24')
+    expect(labelInput1.value).toBe('Admin')
+    expect(cidrInput2.value).toBe('192.168.1.50')
+    expect(labelInput2.value).toBe('Desarrollador')
 
     // Si no hay cambios, el botón Guardar debe estar deshabilitado
     const saveBtn = screen.getByRole('button', { name: 'Guardar allowlist' })
     expect(saveBtn).toBeDisabled()
 
-    // Si se limpia y queda vacío, muestra error
-    fireEvent.change(textarea, { target: { value: '   ' } })
+    // Agregar nueva IP
+    const addBtn = screen.getByRole('button', { name: 'Agregar IP' })
+    fireEvent.click(addBtn)
+
+    // Se agrega fila 3 con CIDR y nombre vacíos
+    const cidrInput3 = screen.getByLabelText('IP o CIDR 3') as HTMLInputElement
+    const labelInput3 = screen.getByLabelText('Nombre 3') as HTMLInputElement
+    expect(cidrInput3.value).toBe('')
+    expect(labelInput3.value).toBe('')
+
+    // Con cambios pendientes, el botón Guardar se habilita
+    expect(saveBtn).not.toBeDisabled()
+
+    // Si se intenta guardar con CIDR vacío, la validación cliente lo impide
     fireEvent.click(saveBtn)
     expect(
-      await screen.findByText(/debes ingresar al menos una dirección ip o rango cidr/i),
+      await screen.findByText(/la dirección ip o cidr no puede estar vacía/i),
     ).toBeInTheDocument()
 
-    // Cambiar por nuevas IPs separadas por coma
-    fireEvent.change(textarea, { target: { value: '10.0.0.1, 10.0.0.2' } })
+    // Llenar CIDR y nombre en la fila 3
+    fireEvent.change(cidrInput3, { target: { value: '10.0.0.1' } })
+    fireEvent.change(labelInput3, { target: { value: 'Nuevo' } })
+
+    // Quitar la fila 2 (Desarrollador)
+    const removeBtn2 = screen.getByRole('button', { name: 'Quitar entrada 2' })
+    fireEvent.click(removeBtn2)
+
+    // Guardar
+    fireEvent.click(saveBtn)
+
+    await waitFor(() => {
+      expect(requestUpdateProxyAllowlistMock).toHaveBeenCalledWith(4, [
+        { cidr: '10.4.24.0/24', label: 'Admin' },
+        { cidr: '10.0.0.1', label: 'Nuevo' },
+      ])
+    })
+  })
+
+  it('permite vaciar la allowlist, muestra el aviso y guarda lista vacía [] en el API', async () => {
+    const clearedMongo: ProxyServiceView = {
+      ...sampleServiceMongo,
+      allowlist: [],
+    }
+    requestUpdateProxyAllowlistMock.mockResolvedValue(clearedMongo)
+
+    renderPage()
+
+    await screen.findByText('MongoDB QA')
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ver detalle de MongoDB QA' }),
+    )
+
+    const detailDialog = await screen.findByRole('dialog')
+    fireEvent.click(
+      within(detailDialog).getByRole('button', { name: 'Editar allowlist' }),
+    )
+
+    await screen.findByRole('heading', { name: 'Editar IPs autorizadas' })
+
+    // Quitar ambas entradas
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar entrada 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar entrada 1' }))
+
+    // Muestra aviso de lista vacía
+    expect(
+      screen.getByText('Sin IPs autorizadas: no se aceptarán conexiones'),
+    ).toBeInTheDocument()
+
+    // Permite guardar lista vacía
+    const saveBtn = screen.getByRole('button', { name: 'Guardar allowlist' })
     expect(saveBtn).not.toBeDisabled()
 
     fireEvent.click(saveBtn)
 
     await waitFor(() => {
-      expect(requestUpdateProxyAllowlistMock).toHaveBeenCalledWith(4, [
-        '10.0.0.1',
-        '10.0.0.2',
-      ])
+      expect(requestUpdateProxyAllowlistMock).toHaveBeenCalledWith(4, [])
     })
+  })
+
+  it('valida en el cliente que no existan CIDRs duplicados ni nombres vacíos en la allowlist', async () => {
+    renderPage()
+    await screen.findByText('MongoDB QA')
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ver detalle de MongoDB QA' }),
+    )
+    const detailDialog = await screen.findByRole('dialog')
+    fireEvent.click(
+      within(detailDialog).getByRole('button', { name: 'Editar allowlist' }),
+    )
+
+    await screen.findByRole('heading', { name: 'Editar IPs autorizadas' })
+
+    // Poner mismo CIDR que fila 1 en fila 2
+    const cidrInput2 = screen.getByLabelText('IP o CIDR 2')
+    fireEvent.change(cidrInput2, { target: { value: '10.4.24.0/24' } })
+
+    const saveBtn = screen.getByRole('button', { name: 'Guardar allowlist' })
+    fireEvent.click(saveBtn)
+
+    expect(
+      await screen.findByText(/está duplicada en la allowlist/i),
+    ).toBeInTheDocument()
+    expect(requestUpdateProxyAllowlistMock).not.toHaveBeenCalled()
+  })
+
+  it('numera las filas visibles con # de 1 a N y se reinicia dinámicamente al filtrar', async () => {
+    renderPage()
+
+    await screen.findByText('Proxy Sentinel')
+
+    // Verificar encabezado #
+    expect(screen.getByRole('columnheader', { name: '#' })).toBeInTheDocument()
+
+    // Comprobar filas iniciales (5 servicios en sampleResponse)
+    const table = screen.getByRole('table', {
+      name: /catálogo de servicios de proxy/i,
+    })
+    const rows = within(table).getAllByRole('row')
+    // row 0 es el encabezado, rows 1..5 son los servicios
+    expect(rows).toHaveLength(6)
+    expect(within(rows[1]!).getByText('1')).toBeInTheDocument()
+    expect(within(rows[2]!).getByText('2')).toBeInTheDocument()
+    expect(within(rows[3]!).getByText('3')).toBeInTheDocument()
+    expect(within(rows[4]!).getByText('4')).toBeInTheDocument()
+    expect(within(rows[5]!).getByText('5')).toBeInTheDocument()
+
+    // Filtrar por búsqueda 'MongoDB'
+    const searchInput = screen.getByLabelText(/buscar proxies/i)
+    fireEvent.change(searchInput, { target: { value: 'MongoDB' } })
+
+    const filteredRows = within(table).getAllByRole('row')
+    expect(filteredRows).toHaveLength(2) // header + 1 servicio
+    expect(within(filteredRows[1]!).getByText('1')).toBeInTheDocument()
+    expect(within(filteredRows[1]!).getByText('MongoDB QA')).toBeInTheDocument()
+
+    // Limpiar búsqueda
+    fireEvent.change(searchInput, { target: { value: '' } })
+    expect(within(table).getAllByRole('row')).toHaveLength(6)
+  })
+
+  it('los botones Detener y Reiniciar tienen el mismo ancho fijo w-28, estilo outline tintado y colores semánticos', async () => {
+    renderPage()
+
+    await screen.findByText('Proxy Sentinel')
+
+    const stopBtn = screen.getByRole('button', {
+      name: 'Detener servicio Proxy Sentinel',
+    })
+    const restartBtn = screen.getByRole('button', {
+      name: 'Reiniciar servicio Proxy Sentinel',
+    })
+
+    // Ambos botones tienen el mismo ancho fijo w-28
+    expect(stopBtn.className).toContain('w-28')
+    expect(restartBtn.className).toContain('w-28')
+
+    // Detener usa rojo --danger y outline tintado
+    expect(stopBtn.className).toContain('text-danger')
+    expect(stopBtn.className).toContain('border-danger/40')
+    expect(stopBtn.className).toContain('bg-danger/10')
+
+    // Reiniciar usa azul primario y outline tintado
+    expect(restartBtn.className).toContain('text-primary')
+    expect(restartBtn.className).toContain('border-primary/40')
+    expect(restartBtn.className).toContain('bg-primary/10')
   })
 
   it('oculta el botón Editar allowlist para usuarios sin permiso proxies.gestionar', async () => {

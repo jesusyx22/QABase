@@ -90,12 +90,20 @@ export function registerProxyRoutes(
         body: {
           type: 'object',
           additionalProperties: false,
-          required: ['cidrs'],
+          required: ['entries'],
           properties: {
-            cidrs: {
+            entries: {
               type: 'array',
               maxItems: 100,
-              items: { type: 'string', minLength: 1, maxLength: 20 },
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['cidr', 'label'],
+                properties: {
+                  cidr: { type: 'string', minLength: 1, maxLength: 20 },
+                  label: { type: 'string', minLength: 1, maxLength: 80 },
+                },
+              },
             },
           },
         },
@@ -109,7 +117,7 @@ export function registerProxyRoutes(
         options.db,
         actorFromSession(auth),
         id,
-        body.cidrs,
+        body.entries,
         {
           logsPath: options.logsPath,
           inspector: options.inspector,

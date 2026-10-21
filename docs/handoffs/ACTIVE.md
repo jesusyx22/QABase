@@ -10,16 +10,21 @@ credenciales en QABase.
 ## Estado
 
 - Rama **`feat/proxies-tcp`**, publicada en `origin`.
-- `npm run verify` en verde en Windows: 45 archivos, **346 tests**, typecheck,
+- `npm run verify` en verde en Windows: 45 archivos, **350 tests**, typecheck,
   lint y build.
-- Migración `011-proxies-tcp` aplicada: `protocol` y `proxy_allowlist`.
+- Migraciones `011-proxies-tcp` y `012-allowlist-labels` aplicadas:
+  `protocol` y allowlist con `cidr + label`. Las entradas existentes quedaron
+  con `label = 'Admin'`.
 - Servicio **`mongodb-qa`** activo y gestionado por QABase (`managed=true`,
   PID 50196), escuchando solo en `10.4.24.18:27017` hacia
   `10.5.83.84:27017`.
 - Servicio **`documentdb-qa`** activo y gestionado (`managed=true`, PID 66344),
   escuchando en `10.4.24.18:27018` hacia el cluster DocumentDB QA con TLS.
-- Allowlist inicial de ambos: **`10.4.24.18/32`**. Los archivos
-  `data/proxies/<slug>.allowlist.json` se actualizan en vivo.
+- Allowlist inicial de ambos: **`10.4.24.18/32`**, etiqueta `Admin`; DocumentDB
+  tiene además `10.4.24.24/32`. Los archivos
+  `data/proxies/<slug>.allowlist.json` solo contienen CIDR y se actualizan en vivo.
+- UI: allowlist por filas `IP/CIDR + Nombre`, primera columna de numeración `#`
+  y Detener/Reiniciar con el mismo ancho (rojo/azul primario).
 - Prueba real: handshake TLS 1.3 contra MongoDB y DocumentDB a través de los
   proxies; allowlist vacía devuelve `ECONNRESET`; al restaurar `10.4.24.18`
   vuelve el handshake.
@@ -58,7 +63,8 @@ credenciales en QABase.
 
 - Probar MongoDB y DocumentDB con Compass desde `10.4.24.18` usando un usuario
   de solo lectura.
-- Ampliar la allowlist desde la UI con las IPs reales del equipo QA.
+- Ampliar la allowlist desde la UI con las IPs reales del equipo QA y asignar
+  a cada una el nombre del responsable (por ejemplo `David`).
 - DocumentDB: usar `tls=true`, `tlsCAFile=global-bundle.pem`,
   `tlsAllowInvalidHostnames=true`, `directConnection=true` y `retryWrites=false`.
 - No volver a arrancar el antiguo `runner.js` de Mantis mientras QABase gestione
@@ -67,6 +73,7 @@ credenciales en QABase.
 ## Archivos clave
 
 - `migrations/011-proxies-tcp.sql`
+- `migrations/012-allowlist-labels.sql`
 - `packages/shared/src/proxies.ts`
 - `apps/api/src/modules/proxies/{catalog,repository,service,validation,control}.ts`
 - `apps/api/src/routes/proxies.ts`
@@ -82,7 +89,7 @@ credenciales en QABase.
 ```text
 npm run verify
 Test Files  45 passed (45)
-Tests       346 passed (346)
+Tests       350 passed (350)
 typecheck, lint y build en verde
 ```
 

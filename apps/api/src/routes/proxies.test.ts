@@ -404,12 +404,20 @@ describe('rutas de proxies', () => {
       method: 'PATCH',
       url: `/api/proxies/${mongoId}/allowlist`,
       headers: authHeaders(adminSession),
-      payload: { cidrs: ['10.4.24.18', '10.4.24.0/24'] },
+      payload: {
+        entries: [
+          { cidr: '10.4.24.18', label: 'Admin' },
+          { cidr: '10.4.24.0/24', label: 'Equipo QA' },
+        ],
+      },
     })
     expect(updated.statusCode).toBe(200)
     expect(updated.json()).toMatchObject({
       protocol: 'tcp',
-      allowlist: ['10.4.24.0/24', '10.4.24.18/32'],
+      allowlist: [
+        { cidr: '10.4.24.0/24', label: 'Equipo QA' },
+        { cidr: '10.4.24.18/32', label: 'Admin' },
+      ],
     })
 
     const audit = db
@@ -423,7 +431,7 @@ describe('rutas de proxies', () => {
       method: 'PATCH',
       url: `/api/proxies/${mongoId}/allowlist`,
       headers: authHeaders(adminSession),
-      payload: { cidrs: ['mongo.local'] },
+      payload: { entries: [{ cidr: 'mongo.local', label: 'Inválido' }] },
     })
     expect(invalid.statusCode).toBe(400)
 
@@ -431,7 +439,7 @@ describe('rutas de proxies', () => {
       method: 'PATCH',
       url: `/api/proxies/${httpId}/allowlist`,
       headers: authHeaders(adminSession),
-      payload: { cidrs: ['10.4.24.18'] },
+      payload: { entries: [{ cidr: '10.4.24.18', label: 'Admin' }] },
     })
     expect(http.statusCode).toBe(400)
 
@@ -441,7 +449,7 @@ describe('rutas de proxies', () => {
       method: 'PATCH',
       url: `/api/proxies/${mongoId}/allowlist`,
       headers: authHeaders(editor),
-      payload: { cidrs: ['10.4.24.18'] },
+      payload: { entries: [{ cidr: '10.4.24.18', label: 'Admin' }] },
     })
     expect(forbidden.statusCode).toBe(403)
 
@@ -451,7 +459,7 @@ describe('rutas de proxies', () => {
       method: 'PATCH',
       url: `/api/proxies/${mongoId}/allowlist`,
       headers: authHeaders(consulta),
-      payload: { cidrs: ['10.4.24.18'] },
+      payload: { entries: [{ cidr: '10.4.24.18', label: 'Admin' }] },
     })
     expect(consultaForbidden.statusCode).toBe(403)
   })

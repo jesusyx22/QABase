@@ -46,11 +46,15 @@ Migración `011-proxies-tcp.sql`.
 id INTEGER PRIMARY KEY
 service_id INTEGER NOT NULL REFERENCES proxy_services(id) ON DELETE CASCADE
 cidr TEXT NOT NULL
+label TEXT NOT NULL
 UNIQUE (service_id, cidr)
 ```
 
 - La allowlist no se borra al sincronizar el manifiesto.
 - `cidr` se normaliza a IPv4/CIDR; una IP simple se guarda como `/32`.
+- `label` es obligatorio, máximo 80 caracteres y puede repetirse entre IPs.
+  Identifica a quién se autoriza; no se envía al proxy.
+- Las entradas existentes se migran con `label = 'Admin'`.
 
 ## Manifiesto y proxy
 
@@ -89,7 +93,8 @@ UNIQUE (service_id, cidr)
 | PATCH | `/api/proxies/:id/allowlist` | `proxies.gestionar` | Reemplazar allowlist |
 
 - `GET /api/proxies` incluye `protocol` y `allowlist` por servicio.
-- `PATCH` recibe `{ cidrs: string[] }`; valida IPv4/CIDR, máximo 100 entradas.
+- `PATCH` recibe `{ entries: [{ cidr, label }] }`; valida IPv4/CIDR, nombre
+  obligatorio y máximo 100 entradas. Rechaza CIDR duplicados.
 - Solo se permite editar la allowlist de servicios `tcp`.
 - Auditoría: `proxy.allowlist_updated` con antes/después.
 - `proxies.ver` consulta; `proxies.operar` opera; `proxies.gestionar` edita.
@@ -100,10 +105,16 @@ UNIQUE (service_id, cidr)
 - El detalle de un servicio TCP muestra:
   - endpoint `IP:puerto`;
   - destino `tcp://host:puerto`;
-  - allowlist actual, o aviso “Sin IPs autorizadas: no se aceptarán conexiones”;
+  - allowlist como `Nombre — CIDR`, o aviso “Sin IPs autorizadas: no se
+    aceptarán conexiones”;
   - botón **Editar allowlist** solo para Administrador.
-- El editor acepta una IP o CIDR por línea, valida y muestra errores.
+- El editor es por filas: IP/CIDR + Nombre obligatorio, agregar y quitar.
+  Permite guardar la lista vacía con el aviso correspondiente.
 - Los servicios HTTP no muestran allowlist.
+- La tabla de Proxies numera las filas visibles desde 1; la numeración se
+  reinicia al buscar o filtrar.
+- Detener y Reiniciar comparten ancho fijo: Detener en rojo `--danger`,
+  Reiniciar en azul primario.
 
 ## Criterios de aceptación
 
@@ -117,12 +128,17 @@ UNIQUE (service_id, cidr)
 7. No hay credenciales en base, archivos, logs ni auditoría.
 8. `documentdb-qa` completa el handshake TLS a través del proxy y respeta la
    allowlist.
-9. `npm run verify` queda en verde.
+9. Cada entrada de allowlist muestra su nombre; nombre vacío o CIDR duplicado
+   se rechazan.
+10. La lista de proxies numera las filas visibles y los botones Detener y
+    Reiniciar tienen el mismo ancho y los colores definidos.
+11. `npm run verify` queda en verde.
 
 ## Archivos previstos
 
 ```text
 migrations/011-proxies-tcp.sql
+migrations/012-allowlist-labels.sql
 packages/shared/src/proxies.ts
 apps/api/src/modules/proxies/{catalog,repository,service,validation,control}.ts
 apps/api/src/routes/proxies.ts
