@@ -22,6 +22,8 @@ de IPs de origen y sin guardar credenciales en QABase.
 - Aplicación en vivo: QABase escribe un archivo local y el proxy lo lee por
   conexión, sin reiniciar.
 - Servicio `mongodb-qa`: `10.4.24.18:27017` → `10.5.83.84:27017`, QA.
+- Servicio `documentdb-qa`: `10.4.24.18:27018` → DocumentDB QA en
+  `intqa-intinfra-primary-cluster...:27017`, con TLS de extremo a extremo.
 
 ### Fuera
 
@@ -72,6 +74,9 @@ UNIQUE (service_id, cidr)
 - `protocol` es opcional en manifiestos antiguos y vale `http` por defecto.
 - Para TCP, `target` debe ser `tcp://host:puerto`.
 - El proxy TCP escucha en `BIND_HOST` y reenvía bytes al target.
+- DocumentDB exige TLS. El cliente usa `tls=true`, `tlsCAFile`,
+  `tlsAllowInvalidHostnames=true` y `directConnection=true`; sin `replicaSet` ni
+  `readPreference`, porque un TCP transparente no sigue la topología descubierta.
 - La allowlist se escribe en `data/proxies/<slug>.allowlist.json`; el proxy la
   lee en cada conexión. Si falta o está vacía, deniega.
 - Las conexiones denegadas se registran en el log con IP de origen; no se
@@ -110,7 +115,9 @@ UNIQUE (service_id, cidr)
 5. Editar la allowlist aplica sin reiniciar el proxy y queda auditado.
 6. Vaciar la allowlist bloquea todas las conexiones.
 7. No hay credenciales en base, archivos, logs ni auditoría.
-8. `npm run verify` queda en verde.
+8. `documentdb-qa` completa el handshake TLS a través del proxy y respeta la
+   allowlist.
+9. `npm run verify` queda en verde.
 
 ## Archivos previstos
 

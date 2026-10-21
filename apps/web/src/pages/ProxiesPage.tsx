@@ -560,7 +560,9 @@ export function ProxiesPage() {
                   const isMongo =
                     service.protocol === 'tcp' &&
                     (service.slug.includes('mongo') ||
+                      service.slug.includes('documentdb') ||
                       service.name.toLowerCase().includes('mongo') ||
+                      service.name.toLowerCase().includes('documentdb') ||
                       service.ports.some((p) => p.port === 27017))
 
                   return (

@@ -16,10 +16,13 @@ credenciales en QABase.
 - Servicio **`mongodb-qa`** activo y gestionado por QABase (`managed=true`,
   PID 50196), escuchando solo en `10.4.24.18:27017` hacia
   `10.5.83.84:27017`.
-- Allowlist inicial: **`10.4.24.18/32`**. El archivo
-  `data/proxies/mongodb-qa.allowlist.json` se actualiza en vivo.
-- Prueba real: handshake TLS contra MongoDB a través del proxy; allowlist vacía
-  devuelve `ECONNRESET`; al restaurar `10.4.24.18` vuelve el handshake.
+- Servicio **`documentdb-qa`** activo y gestionado (`managed=true`, PID 66344),
+  escuchando en `10.4.24.18:27018` hacia el cluster DocumentDB QA con TLS.
+- Allowlist inicial de ambos: **`10.4.24.18/32`**. Los archivos
+  `data/proxies/<slug>.allowlist.json` se actualizan en vivo.
+- Prueba real: handshake TLS 1.3 contra MongoDB y DocumentDB a través de los
+  proxies; allowlist vacía devuelve `ECONNRESET`; al restaurar `10.4.24.18`
+  vuelve el handshake.
 - GitLab, Mantis y Sentinel siguen activos y enlazados a `10.4.24.18`.
 
 ## Decisiones
@@ -33,8 +36,9 @@ credenciales en QABase.
 - El proxy lee la allowlist por conexión desde `data/proxies/<slug>.allowlist.json`.
 - No se guardan URI, usuario, contraseña ni base de datos en QABase.
 - TCP plano en la Ethernet interna; si se requiere cifrado, el cliente usa TLS.
-- Sin IPv6, hostnames, usuarios Mongo administrados por QABase ni varios
-  servidores en este corte.
+- Sin IPv6 ni hostnames en la allowlist; QABase no administra usuarios Mongo.
+- DocumentDB se conecta en modo `directConnection=true`, sin `replicaSet` ni
+  `readPreference`, porque el proxy TCP no sigue la topología descubierta.
 
 ## Hecho
 
@@ -52,8 +56,11 @@ credenciales en QABase.
 
 ## Pendiente
 
-- Probar con MongoDB Compass desde `10.4.24.18` usando el usuario de solo lectura.
+- Probar MongoDB y DocumentDB con Compass desde `10.4.24.18` usando un usuario
+  de solo lectura.
 - Ampliar la allowlist desde la UI con las IPs reales del equipo QA.
+- DocumentDB: usar `tls=true`, `tlsCAFile=global-bundle.pem`,
+  `tlsAllowInvalidHostnames=true`, `directConnection=true` y `retryWrites=false`.
 - No volver a arrancar el antiguo `runner.js` de Mantis mientras QABase gestione
   el servicio.
 
@@ -66,6 +73,7 @@ credenciales en QABase.
 - `apps/web/src/features/proxies/`
 - `apps/web/src/pages/ProxiesPage.tsx`
 - `scripts/proxies/mongodb-qa/{service.json,proxy.cjs}`
+- `scripts/proxies/documentdb-qa/{service.json,proxy.cjs}`
 - `docs/specs/012-proxies-tcp.md`
 - `docs/adr/0014-proxy-tcp.md`
 
@@ -82,10 +90,11 @@ typecheck, lint y build en verde
 GET /api/health -> 200 {"status":"ok"}
 ```
 
-Prueba real de `mongodb-qa`:
+Prueba real de `mongodb-qa` y `documentdb-qa`:
 
 ```text
 listen 10.4.24.18:27017 -> 10.5.83.84:27017
+listen 10.4.24.18:27018 -> DocumentDB QA:27017
 TLS_OK TLSv1.3 (allowlist 10.4.24.18/32)
 ECONNRESET (allowlist vacía)
 ```

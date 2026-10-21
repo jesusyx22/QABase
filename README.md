@@ -45,11 +45,15 @@ npm start         # un solo proceso sirve la SPA y /api
 
 ### MongoDB por TCP
 
-El servicio `mongodb-qa` publica `10.5.83.84:27017` en `10.4.24.18:27017`
-mediante un proxy TCP transparente. Solo acepta las IPs o rangos CIDR de su
-allowlist; vacía significa denegar todo. QABase no guarda usuario, contraseña ni
-URI: el cliente se autentica directamente contra MongoDB. El detalle del
-servicio permite editar la allowlist.
+Los servicios `mongodb-qa` (`10.4.24.18:27017`) y `documentdb-qa`
+(`10.4.24.18:27018`) publican MongoDB y DocumentDB mediante proxies TCP
+transparentes. Solo aceptan las IPs o rangos CIDR de su allowlist; vacía
+significa denegar todo. QABase no guarda usuario, contraseña ni URI: el cliente
+se autentica directamente contra el motor. El detalle de cada servicio permite
+editar la allowlist.
+
+DocumentDB exige TLS y `directConnection=true`; el proxy conserva el cifrado de
+extremo a extremo, pero no sigue el descubrimiento de réplicas.
 
 ### Mesa de Ayuda
 

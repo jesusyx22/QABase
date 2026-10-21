@@ -44,3 +44,6 @@ transparente, con control de IPs de origen y sin almacenar credenciales.
 - Un cliente detrás de NAT se identifica por la IP del NAT.
 - La allowlist vacía deja el servicio inoperante hasta configurarlo.
 - El servicio TCP se opera con el mismo start/stop/restart y logs que los HTTP.
+- DocumentDB con `replicaSet` no se puede seguir con un proxy TCP simple porque
+  el driver descubre las instancias; en ese caso se usa `directConnection=true`
+  o un túnel SSH/VPN que conserve la topología y el DNS de AWS.

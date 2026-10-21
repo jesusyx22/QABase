@@ -114,7 +114,7 @@ server.on('error', (error) => {
 
 server.listen(PORT, BIND_HOST, () => {
   console.log(
-    `MongoDB QA proxy escuchando en ${BIND_HOST}:${PORT} -> ${TARGET_HOST}:${TARGET_PORT}`,
+    `${manifest.name} proxy escuchando en ${BIND_HOST}:${PORT} -> ${TARGET_HOST}:${TARGET_PORT}`,
   )
 })
 

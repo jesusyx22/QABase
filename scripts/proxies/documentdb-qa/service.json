@@ -1,0 +1,16 @@
+{
+  "name": "DocumentDB QA",
+  "environment": "qa",
+  "protocol": "tcp",
+  "entry": "proxy.cjs",
+  "ports": [27018],
+  "primaryPort": 27018,
+  "healthPath": null,
+  "routes": [
+    {
+      "path": "/",
+      "target": "tcp://intqa-intinfra-primary-cluster.cluster-coxcofzqajej.us-east-1.docdb.amazonaws.com:27017",
+      "detail": "DocumentDB QA"
+    }
+  ]
+}

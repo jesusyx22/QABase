@@ -198,12 +198,13 @@ describe('catálogo de servicios de proxy', () => {
     })
 
     const result = syncProxyCatalog(db, root, now)
-    expect(result).toEqual({ services: 4, routes: 5, ports: 5 })
+    expect(result).toEqual({ services: 5, routes: 6, ports: 6 })
     expect(
       db
         .prepare('SELECT slug, entry FROM proxy_services ORDER BY slug')
         .all(),
     ).toEqual([
+      { slug: 'documentdb-qa', entry: 'proxy.cjs' },
       { slug: 'gitlab', entry: 'proxy.cjs' },
       { slug: 'mantis', entry: 'proxy.cjs' },
       { slug: 'mongodb-qa', entry: 'proxy.cjs' },
@@ -216,6 +217,7 @@ describe('catálogo de servicios de proxy', () => {
       now,
     })
     expect(response.services.map((service) => service.slug)).toEqual([
+      'documentdb-qa',
       'gitlab',
       'mantis',
       'mongodb-qa',
@@ -314,6 +316,7 @@ describe('estado de servicios', () => {
         nodeListener(80, 'mantis', 'proxy.cjs'),
         nodeListener(8080, 'mantis', 'proxy.cjs'),
         nodeListener(27017, 'mongodb-qa', 'proxy.cjs'),
+        nodeListener(27018, 'documentdb-qa', 'proxy.cjs'),
         nodeListener(3500, 'sentinel', 'server.cjs'),
       ]),
       healthCheck: async () => true,
