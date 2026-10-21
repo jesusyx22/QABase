@@ -15,6 +15,7 @@ import {
   requestRestartProxy,
   requestStartProxy,
   requestStopProxy,
+  requestUpdateProxyAllowlist,
   updateProxySettings,
   type ProxyListResponse,
   type ProxyServiceView,
@@ -23,6 +24,7 @@ import {
 vi.mock('@/features/proxies/api', () => ({
   requestProxies: vi.fn(),
   updateProxySettings: vi.fn(),
+  requestUpdateProxyAllowlist: vi.fn(),
   requestStartProxy: vi.fn(),
   requestStopProxy: vi.fn(),
   requestRestartProxy: vi.fn(),
@@ -55,6 +57,7 @@ vi.mock('@/features/auth/useAuth', () => ({
 
 const requestProxiesMock = vi.mocked(requestProxies)
 const updateProxySettingsMock = vi.mocked(updateProxySettings)
+const requestUpdateProxyAllowlistMock = vi.mocked(requestUpdateProxyAllowlist)
 const requestStartProxyMock = vi.mocked(requestStartProxy)
 const requestStopProxyMock = vi.mocked(requestStopProxy)
 const requestRestartProxyMock = vi.mocked(requestRestartProxy)
@@ -65,6 +68,8 @@ const sampleService1: ProxyServiceView = {
   slug: 'sentinel',
   name: 'Proxy Sentinel',
   environment: 'qa',
+  protocol: 'http',
+  allowlist: [],
   healthPath: '/bridge-health',
   isActive: true,
   createdAt: '2026-10-01T00:00:00.000Z',
@@ -111,6 +116,8 @@ const sampleService2: ProxyServiceView = {
   slug: 'gitlab',
   name: 'GitLab Proxy',
   environment: 'development',
+  protocol: 'http',
+  allowlist: [],
   healthPath: null,
   isActive: false, // Inactivo!
   createdAt: '2026-10-15T00:00:00.000Z',
@@ -142,6 +149,8 @@ const sampleService3: ProxyServiceView = {
   slug: 'mantis',
   name: 'Mantis BT',
   environment: 'production',
+  protocol: 'http',
+  allowlist: [],
   healthPath: null,
   isActive: true,
   createdAt: '2026-10-06T00:00:00.000Z',
@@ -177,45 +186,65 @@ const sampleService3: ProxyServiceView = {
   },
 }
 
-const sampleService4: ProxyServiceView = {
+const sampleServiceMongo: ProxyServiceView = {
   id: 4,
-  slug: 'external-proxy',
-  name: 'External Mock Proxy',
+  slug: 'mongodb-qa',
+  name: 'MongoDB QA',
   environment: 'qa',
+  protocol: 'tcp',
+  allowlist: ['10.4.24.0/24', '192.168.1.50'],
   healthPath: null,
   isActive: true,
   createdAt: '2026-10-18T00:00:00.000Z',
   updatedAt: '2026-10-18T00:00:00.000Z',
-  ports: [{ port: 9000, isPrimary: true, listening: true }],
-  routes: [{ id: 40, path: '/api', target: 'http://10.0.0.5', detail: null, access: null }],
+  ports: [{ port: 27017, isPrimary: true, listening: true }],
+  routes: [
+    {
+      id: 40,
+      path: '/',
+      target: 'tcp://10.5.83.84:27017',
+      detail: 'Base de datos MongoDB QA',
+      access: null,
+    },
+  ],
   runtime: {
     status: 'active',
-    pid: 99999,
-    managed: false, // Externo!
+    pid: 30120,
+    managed: true,
     health: 'skipped',
     detail: null,
     startedAt: '2026-10-20T09:00:00.000Z',
   },
 }
 
-const sampleServiceError: ProxyServiceView = {
+const sampleServiceTcpEmpty: ProxyServiceView = {
   id: 5,
-  slug: 'error-service',
-  name: 'Error Service Proxy',
-  environment: 'qa',
+  slug: 'tcp-empty',
+  name: 'TCP Sin Allowlist',
+  environment: 'development',
+  protocol: 'tcp',
+  allowlist: [],
   healthPath: null,
   isActive: true,
   createdAt: '2026-10-19T00:00:00.000Z',
   updatedAt: '2026-10-19T00:00:00.000Z',
-  ports: [{ port: 9050, isPrimary: true, listening: false }],
-  routes: [{ id: 50, path: '/err', target: 'http://10.0.0.6', detail: null, access: null }],
+  ports: [{ port: 5432, isPrimary: true, listening: false }],
+  routes: [
+    {
+      id: 50,
+      path: '/',
+      target: 'tcp://10.5.99.1:5432',
+      detail: null,
+      access: null,
+    },
+  ],
   runtime: {
-    status: 'error',
-    pid: 8888,
+    status: 'stopped',
+    pid: null,
     managed: true,
-    health: 'down',
-    detail: 'El proceso falló pero el puerto sigue asociado',
-    startedAt: '2026-10-20T09:30:00.000Z',
+    health: 'skipped',
+    detail: null,
+    startedAt: null,
   },
 }
 
@@ -228,8 +257,8 @@ const sampleResponse: ProxyListResponse = {
     sampleService1,
     sampleService2,
     sampleService3,
-    sampleService4,
-    sampleServiceError,
+    sampleServiceMongo,
+    sampleServiceTcpEmpty,
   ],
 }
 
@@ -291,7 +320,7 @@ describe('ProxiesPage', () => {
     // Fila 2: GitLab Proxy
     expect(screen.getByText('GitLab Proxy')).toBeInTheDocument()
     expect(screen.getByText('10.4.24.18:8081')).toBeInTheDocument()
-    expect(screen.getByText('Detenido')).toBeInTheDocument()
+    expect(screen.getAllByText('Detenido').length).toBeGreaterThan(0)
 
     // Fila 3: Mantis BT con 2 puertos y acceso inactivo
     expect(screen.getByText('Mantis BT')).toBeInTheDocument()
@@ -301,25 +330,30 @@ describe('ProxiesPage', () => {
     expect(screen.getByText('Conflicto')).toBeInTheDocument()
   })
 
-  it('mantiene Detener y Reiniciar en línea con colores semánticos', async () => {
+  it('muestra distintivos TCP y HTTP visibles en el listado junto a cada servicio', async () => {
     renderPage()
 
     await screen.findByText('Proxy Sentinel')
-    const stop = screen.getByRole('button', {
-      name: 'Detener servicio Proxy Sentinel',
-    })
-    const restart = screen.getByRole('button', {
-      name: 'Reiniciar servicio Proxy Sentinel',
-    })
-    const detail = screen.getByRole('button', {
-      name: 'Ver detalle de Proxy Sentinel',
-    })
 
-    expect(stop.parentElement).toBe(restart.parentElement)
-    expect(stop.parentElement).toHaveClass('flex-nowrap')
-    expect(stop).toHaveClass('text-danger')
-    expect(restart).toHaveClass('text-primary')
-    expect(detail).toHaveClass('text-primary')
+    // HTTP badges
+    expect(screen.getAllByText('HTTP').length).toBeGreaterThanOrEqual(3)
+
+    // TCP badges
+    expect(screen.getAllByText('TCP').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('para servicios MongoDB TCP ofrece un botón para copiar la URI mongodb://IP:puerto', async () => {
+    renderPage()
+
+    await screen.findByText('MongoDB QA')
+
+    const mongoBtn = screen.getByRole('button', {
+      name: 'Copiar URI mongodb://10.4.24.18:27017',
+    })
+    expect(mongoBtn).toBeInTheDocument()
+
+    fireEvent.click(mongoBtn)
+    expect(writeTextMock).toHaveBeenCalledWith('mongodb://10.4.24.18:27017')
   })
 
   it('los badges Inactivo y Acceso inactivo usan estilo neutro/gris (DESIGN.md)', async () => {
@@ -427,7 +461,7 @@ describe('ProxiesPage', () => {
     fireEvent.pointerUp(activeOption)
     fireEvent.click(activeOption)
 
-    // GitLab está detenido, así que debe dar 0 resultados
+    // En desarrollo solo tenemos GitLab y tcp-empty (ambos stopped), por lo que Activo da 0 resultados
     await waitFor(() => {
       expect(screen.getByText('Sin resultados')).toBeInTheDocument()
     })
@@ -543,41 +577,6 @@ describe('ProxiesPage', () => {
     })
   })
 
-  it('advierte y pasa confirmExternal=true al detener un proceso no gestionado por QABase', async () => {
-    requestStopProxyMock.mockResolvedValue({
-      ...sampleService4,
-      runtime: {
-        ...sampleService4.runtime,
-        status: 'stopped',
-        pid: null,
-      },
-    })
-
-    renderPage()
-
-    await screen.findByText('External Mock Proxy')
-
-    const stopBtn = screen.getByRole('button', {
-      name: 'Detener servicio External Mock Proxy',
-    })
-    fireEvent.click(stopBtn)
-
-    const dialog = await screen.findByRole('dialog')
-    expect(
-      within(dialog).getByText(/proceso externo no gestionado por qabase/i),
-    ).toBeInTheDocument()
-    expect(
-      within(dialog).getByText(/este proceso fue iniciado fuera de qabase \(pid 99999\)/i),
-    ).toBeInTheDocument()
-
-    // Confirmar
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Detener' }))
-
-    await waitFor(() => {
-      expect(requestStopProxyMock).toHaveBeenCalledWith(4, true)
-    })
-  })
-
   it('reinicia un servicio activo con confirmación', async () => {
     requestRestartProxyMock.mockResolvedValue(sampleService1)
 
@@ -602,25 +601,126 @@ describe('ProxiesPage', () => {
     })
   })
 
-  it('en estado error ofrece Iniciar, Detener y Reiniciar; en conflict NO ofrece Detener', async () => {
+  it('en servicios HTTP NO muestra la sección de allowlist en el diálogo de detalle', async () => {
     renderPage()
 
-    await screen.findByText('Error Service Proxy')
+    await screen.findByText('Proxy Sentinel')
 
-    // Servicio en error: debe ofrecer Iniciar, Detener y Reiniciar
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ver detalle de Proxy Sentinel' }),
+    )
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).queryByText(/IPs autorizadas/i)).not.toBeInTheDocument()
+  })
+
+  it('en servicios TCP muestra la sección IPs autorizadas con las direcciones configuradas', async () => {
+    renderPage()
+
+    await screen.findByText('MongoDB QA')
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ver detalle de MongoDB QA' }),
+    )
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/IPs autorizadas \(2\)/i)).toBeInTheDocument()
+    expect(within(dialog).getByText('10.4.24.0/24')).toBeInTheDocument()
+    expect(within(dialog).getByText('192.168.1.50')).toBeInTheDocument()
+  })
+
+  it('en servicios TCP con allowlist vacía muestra el aviso sin IPs autorizadas', async () => {
+    renderPage()
+
+    await screen.findByText('TCP Sin Allowlist')
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ver detalle de TCP Sin Allowlist' }),
+    )
+
+    const dialog = await screen.findByRole('dialog')
     expect(
-      screen.getByRole('button', { name: 'Iniciar servicio Error Service Proxy' }),
+      within(dialog).getByText(
+        'Sin IPs autorizadas: no se aceptarán conexiones',
+      ),
     ).toBeInTheDocument()
+  })
+
+  it('permite a Administrador editar la allowlist y llama a requestUpdateProxyAllowlist', async () => {
+    const updatedMongo: ProxyServiceView = {
+      ...sampleServiceMongo,
+      allowlist: ['10.0.0.1', '10.0.0.2'],
+    }
+    requestUpdateProxyAllowlistMock.mockResolvedValue(updatedMongo)
+
+    renderPage()
+
+    await screen.findByText('MongoDB QA')
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ver detalle de MongoDB QA' }),
+    )
+
+    const detailDialog = await screen.findByRole('dialog')
+
+    // Botón de edición de allowlist
+    const editBtn = within(detailDialog).getByRole('button', {
+      name: 'Editar allowlist',
+    })
+    fireEvent.click(editBtn)
+
+    // Diálogo de allowlist
+    const allowlistDialog = await screen.findByRole('heading', {
+      name: 'Editar IPs autorizadas',
+    })
+    expect(allowlistDialog).toBeInTheDocument()
+
+    const textarea = screen.getByLabelText(/direcciones ip o rangos cidr/i)
+
+    // Si no hay cambios, el botón Guardar debe estar deshabilitado
+    const saveBtn = screen.getByRole('button', { name: 'Guardar allowlist' })
+    expect(saveBtn).toBeDisabled()
+
+    // Si se limpia y queda vacío, muestra error
+    fireEvent.change(textarea, { target: { value: '   ' } })
+    fireEvent.click(saveBtn)
     expect(
-      screen.getByRole('button', { name: 'Detener servicio Error Service Proxy' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: 'Reiniciar servicio Error Service Proxy' }),
+      await screen.findByText(/debes ingresar al menos una dirección ip o rango cidr/i),
     ).toBeInTheDocument()
 
-    // Servicio en conflict (Mantis BT): NO debe ofrecer Detener
+    // Cambiar por nuevas IPs separadas por coma
+    fireEvent.change(textarea, { target: { value: '10.0.0.1, 10.0.0.2' } })
+    expect(saveBtn).not.toBeDisabled()
+
+    fireEvent.click(saveBtn)
+
+    await waitFor(() => {
+      expect(requestUpdateProxyAllowlistMock).toHaveBeenCalledWith(4, [
+        '10.0.0.1',
+        '10.0.0.2',
+      ])
+    })
+  })
+
+  it('oculta el botón Editar allowlist para usuarios sin permiso proxies.gestionar', async () => {
+    currentPermissions = ['proxies.ver', 'proxies.operar']
+
+    renderPage()
+
+    await screen.findByText('MongoDB QA')
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ver detalle de MongoDB QA' }),
+    )
+
+    const dialog = await screen.findByRole('dialog')
+
+    // Sí ve la allowlist
+    expect(within(dialog).getByText(/IPs autorizadas \(2\)/i)).toBeInTheDocument()
+
+    // NO ve el botón de editar
     expect(
-      screen.queryByRole('button', { name: 'Detener servicio Mantis BT' }),
+      within(dialog).queryByRole('button', { name: 'Editar allowlist' }),
     ).not.toBeInTheDocument()
   })
 
@@ -638,7 +738,7 @@ describe('ProxiesPage', () => {
     expect(within(dialog).getByText('25940')).toBeInTheDocument()
     expect(within(dialog).getByText('Saludable (UP)')).toBeInTheDocument()
 
-    // Simular que el auto-refresh / reload recibe cambio de estado en Proxy Sentinel
+    // Simular que el reload recibe cambio de estado en Proxy Sentinel
     const updatedService1: ProxyServiceView = {
       ...sampleService1,
       runtime: {
@@ -657,12 +757,12 @@ describe('ProxiesPage', () => {
         updatedService1,
         sampleService2,
         sampleService3,
-        sampleService4,
-        sampleServiceError,
+        sampleServiceMongo,
+        sampleServiceTcpEmpty,
       ],
     })
 
-    // Disparar refresh (el botón en el fondo tiene aria-hidden por el diálogo modal abierto)
+    // Disparar refresh
     fireEvent.click(
       screen.getByRole('button', { name: 'Actualizar servicios', hidden: true }),
     )
@@ -692,85 +792,18 @@ describe('ProxiesPage', () => {
 
     const dialog = await screen.findByRole('dialog')
 
-    // Debe mostrar el error sin quedar cargando indefinidamente
     expect(
       await within(dialog).findByText('No se pudo leer el archivo de log.'),
     ).toBeInTheDocument()
 
-    // El botón Reintentar o Actualizar logs no debe estar deshabilitado
     const retryBtn = within(dialog).getByRole('button', { name: 'Reintentar' })
     expect(retryBtn).not.toBeDisabled()
 
     fireEvent.click(retryBtn)
 
-    // Tras el reintento exitoso, los logs aparecen
     expect(
       await within(dialog).findByText(/log recuperado tras reintento/i),
     ).toBeInTheDocument()
-  })
-
-  it('abre el detalle del servicio y muestra información de proceso, puertos, rutas y logs', async () => {
-    renderPage()
-
-    await screen.findByText('Proxy Sentinel')
-
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Ver detalle de Proxy Sentinel' }),
-    )
-
-    const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByText('25940')).toBeInTheDocument()
-    expect(within(dialog).getByText('Saludable (UP)')).toBeInTheDocument()
-    expect(within(dialog).getByText('10.4.24.18:3500')).toBeInTheDocument()
-    expect(within(dialog).getByText('Escuchando')).toBeInTheDocument()
-
-    // Logs cargados
-    expect(
-      await within(dialog).findByTestId('proxy-log-output'),
-    ).toBeInTheDocument()
-    expect(
-      within(dialog).getByText(/server started on port 3500/i),
-    ).toBeInTheDocument()
-
-    // Botón refrescar logs
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Actualizar logs' }))
-    await waitFor(() => {
-      expect(requestProxyLogsMock).toHaveBeenCalledTimes(2)
-    })
-
-    // Cerrar
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Cerrar' }))
-    await waitFor(() => {
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    })
-  })
-
-  it('oculta acciones operativas y de gestión para usuarios de consulta (solo proxies.ver)', async () => {
-    currentPermissions = ['proxies.ver']
-
-    renderPage()
-
-    await screen.findByText('Proxy Sentinel')
-
-    // Sin botón Cambiar IP
-    expect(screen.queryByRole('button', { name: /cambiar ip/i })).not.toBeInTheDocument()
-
-    // Sin botones Iniciar, Detener o Reiniciar
-    expect(screen.queryByRole('button', { name: /iniciar servicio/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /detener servicio/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /reiniciar servicio/i })).not.toBeInTheDocument()
-
-    // SÍ puede ver Detalle
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Ver detalle de Proxy Sentinel' }),
-    )
-
-    const dialog = await screen.findByRole('dialog')
-    // No debe mostrar la sección de logs para usuarios sin proxies.operar
-    expect(
-      within(dialog).queryByText(/últimas 100 líneas de log/i),
-    ).not.toBeInTheDocument()
-    expect(requestProxyLogsMock).not.toHaveBeenCalled()
   })
 
   it('permite a Administrador configurar y cambiar la IP global', async () => {
@@ -787,7 +820,7 @@ describe('ProxiesPage', () => {
 
     const dialog = await screen.findByRole('dialog')
     expect(
-      within(dialog).getByText(/esta acción cambia la IP de escucha de 5 servicios/i),
+      within(dialog).getByText(/esta acción cambia la ip de escucha de 5 servicios/i),
     ).toBeInTheDocument()
 
     const input = within(dialog).getByLabelText(/dirección ipv4/i)

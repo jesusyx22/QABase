@@ -1,0 +1,16 @@
+{
+  "name": "MongoDB QA",
+  "environment": "qa",
+  "protocol": "tcp",
+  "entry": "proxy.cjs",
+  "ports": [27017],
+  "primaryPort": 27017,
+  "healthPath": null,
+  "routes": [
+    {
+      "path": "/",
+      "target": "tcp://10.5.83.84:27017",
+      "detail": "MongoDB QA"
+    }
+  ]
+}

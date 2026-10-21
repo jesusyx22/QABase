@@ -1,5 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite'
-import type { ProxyEnvironment } from '@qabase/shared'
+import type {
+  ProxyEnvironment,
+  ProxyProtocol,
+} from '@qabase/shared'
 
 export type SettingsRow = { host: string; version: number }
 
@@ -46,6 +49,7 @@ export type ServiceRow = {
   slug: string
   name: string
   environment: ProxyEnvironment
+  protocol: ProxyProtocol
   entry: string
   healthPath: string | null
   isActive: number
@@ -95,6 +99,7 @@ const SERVICE_COLUMNS = `
   slug,
   name,
   environment,
+  protocol,
   entry,
   health_path AS healthPath,
   is_active AS isActive,
@@ -155,6 +160,35 @@ export function findRouteAccess(
         WHERE id = ?`,
     )
     .get(id) as RouteAccessRow | undefined
+}
+
+export type AllowlistRow = {
+  serviceId: number
+  cidr: string
+}
+
+export function listAllowlistRows(db: DatabaseSync): AllowlistRow[] {
+  return db
+    .prepare(
+      `SELECT service_id AS serviceId, cidr
+         FROM proxy_allowlist
+        ORDER BY service_id, cidr`,
+    )
+    .all() as AllowlistRow[]
+}
+
+export function replaceAllowlist(
+  db: DatabaseSync,
+  serviceId: number,
+  cidrs: string[],
+): void {
+  db.prepare('DELETE FROM proxy_allowlist WHERE service_id = ?').run(serviceId)
+  const insert = db.prepare(
+    'INSERT INTO proxy_allowlist (service_id, cidr) VALUES (?, ?)',
+  )
+  for (const cidr of cidrs) {
+    insert.run(serviceId, cidr)
+  }
 }
 
 export function listRuntimeRows(db: DatabaseSync): RuntimeRow[] {

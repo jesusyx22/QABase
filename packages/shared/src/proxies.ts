@@ -11,6 +11,8 @@ export type ProxyEnvironment =
   | 'production'
   | 'unspecified'
 
+export type ProxyProtocol = 'http' | 'tcp'
+
 export type ProxyStatus =
   | 'active'
   | 'starting'
@@ -63,10 +65,12 @@ export type ProxyServiceView = {
   slug: string
   name: string
   environment: ProxyEnvironment
+  protocol: ProxyProtocol
   healthPath: string | null
   isActive: boolean
   routes: ProxyRoute[]
   ports: ProxyPort[]
+  allowlist: string[]
   runtime: ProxyRuntime
   createdAt: string
   updatedAt: string
@@ -80,6 +84,10 @@ export type ProxyListResponse = {
 export type UpdateProxySettingsInput = {
   host: string
   version?: number
+}
+
+export type UpdateProxyAllowlistInput = {
+  cidrs: string[]
 }
 
 export type ProxyLogsResponse = {

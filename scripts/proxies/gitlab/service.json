@@ -1,6 +1,7 @@
 {
   "name": "GitLab",
   "environment": "qa",
+  "protocol": "http",
   "entry": "proxy.cjs",
   "ports": [8081],
   "primaryPort": 8081,

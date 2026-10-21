@@ -1,6 +1,7 @@
 {
   "name": "Proxy Sentinel",
   "environment": "qa",
+  "protocol": "http",
   "entry": "server.cjs",
   "ports": [3500],
   "primaryPort": 3500,

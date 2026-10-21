@@ -4,7 +4,10 @@ import type { DatabaseSync } from 'node:sqlite'
 import { invalidInput } from '../../core/errors'
 import { inTransaction } from '../../core/transaction'
 import { normalizeAddress } from '../accesses/validation'
-import type { ProxyEnvironment } from '@qabase/shared'
+import type {
+  ProxyEnvironment,
+  ProxyProtocol,
+} from '@qabase/shared'
 
 export type ProxyManifestAccess = {
   address: string
@@ -22,6 +25,7 @@ export type ProxyManifest = {
   slug: string
   name: string
   environment: ProxyEnvironment
+  protocol: ProxyProtocol
   entry: string
   ports: number[]
   primaryPort: number
@@ -82,7 +86,11 @@ function validateOptionalText(
   return text
 }
 
-function validateRoute(value: unknown, slug: string): ProxyManifestRoute {
+function validateRoute(
+  value: unknown,
+  slug: string,
+  protocol: ProxyProtocol,
+): ProxyManifestRoute {
   if (typeof value !== 'object' || value === null) {
     throw invalidInput(`Ruta inválida en ${slug}.`)
   }
@@ -92,8 +100,23 @@ function validateRoute(value: unknown, slug: string): ProxyManifestRoute {
     throw invalidInput(`path de ${slug} debe empezar con /.`)
   }
   const target = validateText(route.target, `target de ${slug}`, 2000)
-  if (!/^https?:\/\/[^/\s]+/i.test(target)) {
+  if (protocol === 'http' && !/^https?:\/\/[^/\s]+/i.test(target)) {
     throw invalidInput(`target de ${slug} debe ser una URL http(s).`)
+  }
+  if (protocol === 'tcp') {
+    let parsed: URL
+    try {
+      parsed = new URL(target)
+    } catch {
+      throw invalidInput(`target de ${slug} debe ser tcp://host:puerto.`)
+    }
+    if (
+      parsed.protocol !== 'tcp:' ||
+      parsed.hostname === '' ||
+      parsed.port === ''
+    ) {
+      throw invalidInput(`target de ${slug} debe ser tcp://host:puerto.`)
+    }
   }
   const detail = validateOptionalText(route.detail, `detail de ${slug}`, 200)
   let access: ProxyManifestAccess | null = null
@@ -128,6 +151,11 @@ export function parseProxyManifest(
   ) {
     throw invalidInput(`environment de ${slug} no es válido.`)
   }
+  const protocolValue = value.protocol ?? 'http'
+  if (protocolValue !== 'http' && protocolValue !== 'tcp') {
+    throw invalidInput(`protocol de ${slug} no es válido.`)
+  }
+  const protocol = protocolValue as ProxyProtocol
   const entry = validateText(value.entry, `entry de ${slug}`, 100)
   if (!ENTRY_PATTERN.test(entry) || entry.includes('..')) {
     throw invalidInput(`entry de ${slug} debe ser un archivo simple.`)
@@ -159,7 +187,9 @@ export function parseProxyManifest(
   if (!Array.isArray(value.routes) || value.routes.length === 0) {
     throw invalidInput(`routes de ${slug} debe tener al menos una ruta.`)
   }
-  const routes = value.routes.map((route) => validateRoute(route, slug))
+  const routes = value.routes.map((route) =>
+    validateRoute(route, slug, protocol),
+  )
   const routePaths = new Set<string>()
   for (const route of routes) {
     if (routePaths.has(route.path)) {
@@ -172,6 +202,7 @@ export function parseProxyManifest(
     slug,
     name,
     environment: value.environment as ProxyEnvironment,
+    protocol,
     entry,
     ports,
     primaryPort,
@@ -274,12 +305,14 @@ export function syncProxyCatalog(
         serviceId = existing.id
         db.prepare(
           `UPDATE proxy_services
-              SET name = ?, environment = ?, entry = ?, health_path = ?,
-                  is_active = 1, version = version + 1, updated_at = ?
+              SET name = ?, environment = ?, protocol = ?, entry = ?,
+                  health_path = ?, is_active = 1, version = version + 1,
+                  updated_at = ?
             WHERE id = ?`,
         ).run(
           manifest.name,
           manifest.environment,
+          manifest.protocol,
           manifest.entry,
           manifest.healthPath,
           timestamp,
@@ -290,14 +323,15 @@ export function syncProxyCatalog(
           db
             .prepare(
               `INSERT INTO proxy_services
-                (slug, name, environment, entry, health_path, is_active,
-                 version, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)`,
+                (slug, name, environment, protocol, entry, health_path,
+                 is_active, version, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, 1, 1, ?, ?)`,
             )
             .run(
               manifest.slug,
               manifest.name,
               manifest.environment,
+              manifest.protocol,
               manifest.entry,
               manifest.healthPath,
               timestamp,

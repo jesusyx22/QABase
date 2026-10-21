@@ -1,4 +1,7 @@
-import type { UpdateProxySettingsInput } from '@qabase/shared'
+import type {
+  UpdateProxyAllowlistInput,
+  UpdateProxySettingsInput,
+} from '@qabase/shared'
 import type { FastifyInstance } from 'fastify'
 import type { DatabaseSync } from 'node:sqlite'
 import type { Clock } from '../core/clock'
@@ -10,6 +13,7 @@ import {
   restartProxy,
   startProxy,
   stopProxy,
+  updateProxyAllowlist,
   updateProxySettings,
 } from '../modules/proxies/service'
 import type {
@@ -75,6 +79,44 @@ export function registerProxyRoutes(
         ...body,
         now: options.clock(),
       })
+    },
+  )
+
+  app.patch(
+    '/api/proxies/:id/allowlist',
+    {
+      schema: {
+        params: idParams,
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['cidrs'],
+          properties: {
+            cidrs: {
+              type: 'array',
+              maxItems: 100,
+              items: { type: 'string', minLength: 1, maxLength: 20 },
+            },
+          },
+        },
+      },
+    },
+    async (request) => {
+      const auth = requirePermission(request, 'proxies.gestionar')
+      const { id } = request.params as { id: number }
+      const body = request.body as UpdateProxyAllowlistInput
+      return updateProxyAllowlist(
+        options.db,
+        actorFromSession(auth),
+        id,
+        body.cidrs,
+        {
+          logsPath: options.logsPath,
+          inspector: options.inspector,
+          healthCheck: options.healthCheck,
+          now: options.clock(),
+        },
+      )
     },
   )
 

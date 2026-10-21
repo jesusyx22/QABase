@@ -10,7 +10,7 @@ import type {
 } from '@qabase/shared'
 import type { DatabaseSync } from 'node:sqlite'
 import { insertAuditEvent } from '../../core/audit'
-import { conflict, notFound } from '../../core/errors'
+import { conflict, invalidInput, notFound } from '../../core/errors'
 import { inTransaction } from '../../core/transaction'
 import type { Actor } from '../identity/actor'
 import {
@@ -18,10 +18,12 @@ import {
   findRuntime,
   findService,
   findSettings,
+  listAllowlistRows,
   listPortRows,
   listRouteRows,
   listRuntimeRows,
   listServiceRows,
+  replaceAllowlist,
   saveRuntime,
   saveSettings,
   type RuntimeRow,
@@ -36,12 +38,18 @@ import {
   type ProxyHealthCheck,
 } from './process'
 import {
+  allowlistPathFor,
   createSystemProcessController,
   logPathFor,
   readLogTail,
+  writeAllowlistFile,
   type ProxyProcessController,
 } from './control'
-import { validateHost, validateVersion } from './validation'
+import {
+  normalizeAllowlist,
+  validateHost,
+  validateVersion,
+} from './validation'
 
 export function getProxySettings(db: DatabaseSync): ProxySettings {
   return findSettings(db) ?? { host: null, version: null }
@@ -141,6 +149,7 @@ export async function listProxies(
   const services = listServiceRows(db)
   const ports = listPortRows(db)
   const routes = listRouteRows(db)
+  const allowlists = listAllowlistRows(db)
   const runtimes = new Map(
     listRuntimeRows(db).map((row) => [row.serviceId, row] as const),
   )
@@ -184,12 +193,16 @@ export async function listProxies(
       slug: service.slug,
       name: service.name,
       environment: service.environment,
+      protocol: service.protocol,
       healthPath: service.healthPath,
       isActive: service.isActive === 1,
       routes: routes
         .filter((route) => route.serviceId === service.id)
         .map((route) => mapRoute(db, route)),
       ports: servicePorts,
+      allowlist: allowlists
+        .filter((row) => row.serviceId === service.id)
+        .map((row) => row.cidr),
       runtime: serviceRuntime,
       createdAt: service.createdAt,
       updatedAt: service.updatedAt,
@@ -246,10 +259,16 @@ function isManagedCommand(
   return commandLine.replaceAll('\\', '/').includes(marker)
 }
 
+type ProxyViewOptions = {
+  inspector: ProcessInspector
+  healthCheck?: ProxyHealthCheck
+  now: Date
+}
+
 async function serviceView(
   db: DatabaseSync,
   id: number,
-  options: ProxyControlOptions,
+  options: ProxyViewOptions,
 ): Promise<ProxyServiceView> {
   const response = await listProxies(db, {
     inspector: options.inspector,
@@ -403,6 +422,16 @@ async function startProxyUnlocked(
   }
   const primaryPort =
     ports.find((row) => row.isPrimary === 1)?.port ?? ports[0]!.port
+  let allowlistFile: string | undefined
+  if (service.protocol === 'tcp') {
+    allowlistFile = allowlistPathFor(options.logsPath, service.slug)
+    writeAllowlistFile(
+      allowlistFile,
+      listAllowlistRows(db)
+        .filter((row) => row.serviceId === service.id)
+        .map((row) => row.cidr),
+    )
+  }
   let pid: number
   try {
     const started = await options.controller.start({
@@ -412,6 +441,7 @@ async function startProxyUnlocked(
       primaryPort,
       logFile: logPathFor(options.logsPath, service.slug),
       host: bindHost,
+      allowlistFile,
     })
     pid = started.pid
   } catch (error) {
@@ -651,6 +681,42 @@ export function getProxyLogs(
   return {
     lines: readLogTail(logPathFor(logsPath, service.slug), lines),
   }
+}
+
+export type ProxyAllowlistOptions = ProxyViewOptions & {
+  logsPath: string
+}
+
+export async function updateProxyAllowlist(
+  db: DatabaseSync,
+  actor: Actor,
+  id: number,
+  cidrs: string[],
+  options: ProxyAllowlistOptions,
+): Promise<ProxyServiceView> {
+  const service = requireService(db, id)
+  if (service.protocol !== 'tcp') {
+    throw invalidInput('La allowlist solo aplica a servicios TCP.')
+  }
+  const normalized = normalizeAllowlist(cidrs)
+  const before = listAllowlistRows(db)
+    .filter((row) => row.serviceId === id)
+    .map((row) => row.cidr)
+  inTransaction(db, () => {
+    replaceAllowlist(db, id, normalized)
+    audit(
+      db,
+      actor,
+      'proxy.allowlist_updated',
+      'proxy',
+      id,
+      options.now,
+      { allowlist: before },
+      { allowlist: normalized },
+    )
+  })
+  writeAllowlistFile(allowlistPathFor(options.logsPath, service.slug), normalized)
+  return serviceView(db, id, options)
 }
 
 export function systemProxyDependencies() {

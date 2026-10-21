@@ -67,6 +67,22 @@ function proxiesFixture(): string {
         },
       ],
     },
+    'mongodb-qa': {
+      name: 'MongoDB QA',
+      environment: 'qa',
+      protocol: 'tcp',
+      entry: 'proxy.cjs',
+      ports: [27017],
+      primaryPort: 27017,
+      healthPath: null,
+      routes: [
+        {
+          path: '/',
+          target: 'tcp://10.5.83.84:27017',
+          detail: 'MongoDB QA',
+        },
+      ],
+    },
   }
   for (const [slug, manifest] of Object.entries(manifests)) {
     mkdirSync(join(dir, slug))
@@ -302,7 +318,7 @@ describe('rutas de proxies', () => {
 
     const initial = await readProxies(app, session)
     expect(initial.settings).toEqual({ host: null, version: null })
-    expect(initial.services).toHaveLength(3)
+    expect(initial.services).toHaveLength(4)
     expect(initial.services.every((service: { runtime: { status: string } }) => service.runtime.status === 'stopped')).toBe(true)
 
     const settings = await app.inject({
@@ -344,7 +360,7 @@ describe('rutas de proxies', () => {
     await createEditorOrConsulta(db, admin, 'consulta', now)
     const consulta = await login(app, 'consulta')
     const listing = await readProxies(app, consulta)
-    expect(listing.services).toHaveLength(3)
+    expect(listing.services).toHaveLength(4)
 
     const forbiddenStart = await app.inject({
       method: 'POST',
@@ -375,6 +391,69 @@ describe('rutas de proxies', () => {
       payload: { host: '10.4.24.18' },
     })
     expect(forbiddenSettings.statusCode).toBe(403)
+  })
+
+  it('permite al Administrador editar la allowlist TCP y bloquea a los demás', async () => {
+    const { app, db, admin, now } = await createHarness()
+    const adminSession = await login(app)
+    const listing = await readProxies(app, adminSession)
+    const mongoId = serviceId(listing, 'mongodb-qa')
+    const httpId = serviceId(listing, 'gitlab')
+
+    const updated = await app.inject({
+      method: 'PATCH',
+      url: `/api/proxies/${mongoId}/allowlist`,
+      headers: authHeaders(adminSession),
+      payload: { cidrs: ['10.4.24.18', '10.4.24.0/24'] },
+    })
+    expect(updated.statusCode).toBe(200)
+    expect(updated.json()).toMatchObject({
+      protocol: 'tcp',
+      allowlist: ['10.4.24.0/24', '10.4.24.18/32'],
+    })
+
+    const audit = db
+      .prepare(
+        "SELECT action FROM audit_events WHERE action = 'proxy.allowlist_updated'",
+      )
+      .get() as { action: string } | undefined
+    expect(audit?.action).toBe('proxy.allowlist_updated')
+
+    const invalid = await app.inject({
+      method: 'PATCH',
+      url: `/api/proxies/${mongoId}/allowlist`,
+      headers: authHeaders(adminSession),
+      payload: { cidrs: ['mongo.local'] },
+    })
+    expect(invalid.statusCode).toBe(400)
+
+    const http = await app.inject({
+      method: 'PATCH',
+      url: `/api/proxies/${httpId}/allowlist`,
+      headers: authHeaders(adminSession),
+      payload: { cidrs: ['10.4.24.18'] },
+    })
+    expect(http.statusCode).toBe(400)
+
+    await createEditorOrConsulta(db, admin, 'editor', now)
+    const editor = await login(app, 'editor')
+    const forbidden = await app.inject({
+      method: 'PATCH',
+      url: `/api/proxies/${mongoId}/allowlist`,
+      headers: authHeaders(editor),
+      payload: { cidrs: ['10.4.24.18'] },
+    })
+    expect(forbidden.statusCode).toBe(403)
+
+    await createEditorOrConsulta(db, admin, 'consulta', now)
+    const consulta = await login(app, 'consulta')
+    const consultaForbidden = await app.inject({
+      method: 'PATCH',
+      url: `/api/proxies/${mongoId}/allowlist`,
+      headers: authHeaders(consulta),
+      payload: { cidrs: ['10.4.24.18'] },
+    })
+    expect(consultaForbidden.statusCode).toBe(403)
   })
 
   it('inicia, detiene y reinicia con confirmación y auditoría', async () => {

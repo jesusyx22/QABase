@@ -1,6 +1,7 @@
 import type {
   ProxyEnvironment,
   ProxyHealth,
+  ProxyProtocol,
   ProxyStatus,
 } from './api'
 
@@ -23,6 +24,20 @@ export function formatEndpoint(host: string | null, port: number): string {
     return `:${port}`
   }
   return `${host}:${port}`
+}
+
+export function formatTarget(target: string, protocol?: ProxyProtocol): string {
+  if (protocol === 'tcp' && !target.includes('://')) {
+    return `tcp://${target}`
+  }
+  return target
+}
+
+export function parseAllowlistInput(input: string): string[] {
+  return input
+    .split(/[\n,]+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
 }
 
 export type StatusBadgeConfig = {
@@ -82,6 +97,10 @@ export function proxyHealthLabel(health: ProxyHealth): string {
     default:
       return health
   }
+}
+
+export function proxyProtocolLabel(protocol: ProxyProtocol): string {
+  return protocol.toUpperCase()
 }
 
 export const PROXY_ENVIRONMENT_OPTIONS = [

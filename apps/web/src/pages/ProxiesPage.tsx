@@ -42,9 +42,11 @@ import {
 import { GlobalHostCard } from '@/features/proxies/GlobalHostCard'
 import {
   formatEndpoint,
+  formatTarget,
   PROXY_ENVIRONMENT_OPTIONS,
   PROXY_STATUS_OPTIONS,
   proxyEnvironmentLabel,
+  proxyProtocolLabel,
   proxyStatusConfig,
 } from '@/features/proxies/labels'
 import { ProxyActionDialog, type ProxyActionType } from '@/features/proxies/ProxyActionDialog'
@@ -52,8 +54,15 @@ import { ProxyDetailDialog } from '@/features/proxies/ProxyDetailDialog'
 
 const SKELETON_ROWS = [0, 1, 2, 3]
 
-function EndpointCell({ endpoint }: { endpoint: string }) {
+function EndpointCell({
+  endpoint,
+  isMongo = false,
+}: {
+  endpoint: string
+  isMongo?: boolean
+}) {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
+  const [mongoCopyState, setMongoCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
 
   const handleCopy = async () => {
     try {
@@ -65,36 +74,70 @@ function EndpointCell({ endpoint }: { endpoint: string }) {
     window.setTimeout(() => setCopyState('idle'), 2500)
   }
 
+  const handleCopyMongo = async () => {
+    try {
+      await navigator.clipboard.writeText(`mongodb://${endpoint}`)
+      setMongoCopyState('copied')
+    } catch {
+      setMongoCopyState('error')
+    }
+    window.setTimeout(() => setMongoCopyState('idle'), 2500)
+  }
+
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="font-mono text-xs font-semibold tabular-nums text-foreground">
-        {endpoint}
-      </span>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-6 w-6"
-        onClick={handleCopy}
-        aria-label={`Copiar endpoint ${endpoint}`}
-        title={
-          copyState === 'error'
-            ? 'No se pudo copiar; selecciona el endpoint manualmente'
-            : `Copiar ${endpoint}`
-        }
-      >
-        {copyState === 'copied' ? (
-          <Check className="h-3.5 w-3.5 text-foreground" aria-hidden="true" />
-        ) : (
-          <Copy className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-        )}
-      </Button>
+    <div className="space-y-1">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="font-mono text-xs font-semibold tabular-nums text-foreground">
+          {endpoint}
+        </span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6"
+          onClick={handleCopy}
+          aria-label={`Copiar endpoint ${endpoint}`}
+          title={
+            copyState === 'error'
+              ? 'No se pudo copiar; selecciona el endpoint manualmente'
+              : `Copiar ${endpoint}`
+          }
+        >
+          {copyState === 'copied' ? (
+            <Check className="h-3.5 w-3.5 text-foreground" aria-hidden="true" />
+          ) : (
+            <Copy className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+          )}
+        </Button>
+        {isMongo ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            className="h-6 px-1.5 font-mono text-[10px] text-muted-foreground hover:text-foreground"
+            onClick={handleCopyMongo}
+            aria-label={`Copiar URI mongodb://${endpoint}`}
+            title={`Copiar URI mongodb://${endpoint}`}
+          >
+            {mongoCopyState === 'copied' ? (
+              <>
+                <Check className="mr-1 h-3 w-3 text-foreground" aria-hidden="true" />
+                <span>Copiado</span>
+              </>
+            ) : (
+              <span>mongodb://</span>
+            )}
+          </Button>
+        ) : null}
+      </div>
       <span className="sr-only" role="status" aria-live="polite">
         {copyState === 'copied'
           ? 'Endpoint copiado.'
           : copyState === 'error'
             ? 'No se pudo copiar el endpoint. Selecciónalo manualmente.'
-            : ''}
+            : mongoCopyState === 'copied'
+              ? 'URI mongodb copiada.'
+              : ''}
       </span>
       {copyState === 'error' ? (
         <span className="text-[10px] text-muted-foreground">No se pudo copiar</span>
@@ -245,6 +288,7 @@ export function ProxiesPage() {
       if (q !== '') {
         const matchesName = service.name.toLowerCase().includes(q)
         const matchesSlug = service.slug.toLowerCase().includes(q)
+        const matchesProtocol = service.protocol.toLowerCase().includes(q)
         const matchesPort = service.ports.some((p) =>
           String(p.port).includes(q),
         )
@@ -258,7 +302,13 @@ export function ProxiesPage() {
                 (r.access.detail && r.access.detail.toLowerCase().includes(q)))),
         )
 
-        if (!matchesName && !matchesSlug && !matchesPort && !matchesRoute) {
+        if (
+          !matchesName &&
+          !matchesSlug &&
+          !matchesProtocol &&
+          !matchesPort &&
+          !matchesRoute
+        ) {
           return false
         }
       }
@@ -325,7 +375,7 @@ export function ProxiesPage() {
         </CardHeader>
 
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-start gap-3 border-b border-border pb-4">
+          <div className="flex flex-wrap items-end gap-3 border-b border-border pb-4">
             <div className="w-full max-w-sm space-y-1.5">
               <Label htmlFor="proxy-search">Buscar proxies</Label>
               <Input
@@ -496,29 +546,38 @@ export function ProxiesPage() {
                   const isConflict = status === 'conflict'
 
                   // Reglas de acciones:
-                  // Iniciar: disponible en stopped o error
                   const canStart = status === 'stopped' || status === 'error'
-                  // Detener: si tiene PID o error o active/starting, excepto en conflict (procesos ajenos)
                   const canStop =
                     !isConflict &&
                     (status === 'active' ||
                       status === 'starting' ||
                       status === 'error' ||
                       hasPid)
-                  // Reiniciar: si está activo, error o tiene PID, excepto en conflict
                   const canRestart =
                     !isConflict &&
                     (status === 'active' || status === 'error' || hasPid)
+
+                  const isMongo =
+                    service.protocol === 'tcp' &&
+                    (service.slug.includes('mongo') ||
+                      service.name.toLowerCase().includes('mongo') ||
+                      service.ports.some((p) => p.port === 27017))
 
                   return (
                     <TableRow key={service.id}>
                       {/* 1. Nombre */}
                       <TableCell className="font-medium align-top">
                         <div className="space-y-0.5">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
                             <span className="font-semibold text-foreground">
                               {service.name}
                             </span>
+                            <Badge
+                              variant="outline"
+                              className="font-mono text-[10px] uppercase font-semibold text-foreground"
+                            >
+                              {proxyProtocolLabel(service.protocol)}
+                            </Badge>
                             {!service.isActive ? (
                               <Badge
                                 variant="outline"
@@ -551,6 +610,7 @@ export function ProxiesPage() {
                                 <EndpointCell
                                   key={p.port}
                                   endpoint={endpoint}
+                                  isMongo={isMongo}
                                 />
                               )
                             })
@@ -566,53 +626,59 @@ export function ProxiesPage() {
                               Sin rutas
                             </span>
                           ) : (
-                            service.routes.map((r) => (
-                              <div
-                                key={r.id}
-                                className="space-y-0.5 border-b border-border/40 pb-1.5 last:border-b-0 last:pb-0"
-                              >
-                                <div className="flex flex-wrap items-center gap-1 text-xs font-mono">
-                                  <span className="font-semibold text-foreground">
-                                    {r.path}
-                                  </span>
-                                  <span className="text-muted-foreground">
-                                    &rarr;
-                                  </span>
-                                  <span className="text-muted-foreground break-all">
-                                    {r.target}
-                                  </span>
-                                </div>
-                                <div className="text-[11px]">
-                                  {r.access ? (
-                                    <div className="flex items-center gap-1 text-foreground">
-                                      <span
-                                        title={
-                                          r.access.detail ?? r.access.address
-                                        }
-                                      >
-                                        {r.access.detail ?? r.access.address} (
-                                        <span className="font-mono tabular-nums">
-                                          {r.access.address}:{r.access.port}
-                                        </span>
-                                        )
-                                      </span>
-                                      {!r.access.isActive ? (
-                                        <Badge
-                                          variant="outline"
-                                          className="text-muted-foreground text-[9px] py-0 px-1"
-                                        >
-                                          Acceso inactivo
-                                        </Badge>
-                                      ) : null}
-                                    </div>
-                                  ) : (
-                                    <span className="text-muted-foreground">
-                                      Sin acceso en el catálogo
+                            service.routes.map((r) => {
+                              const targetFormatted = formatTarget(
+                                r.target,
+                                service.protocol,
+                              )
+                              return (
+                                <div
+                                  key={r.id}
+                                  className="space-y-0.5 border-b border-border/40 pb-1.5 last:border-b-0 last:pb-0"
+                                >
+                                  <div className="flex flex-wrap items-center gap-1 text-xs font-mono">
+                                    <span className="font-semibold text-foreground">
+                                      {r.path}
                                     </span>
-                                  )}
+                                    <span className="text-muted-foreground">
+                                      &rarr;
+                                    </span>
+                                    <span className="text-muted-foreground break-all">
+                                      {targetFormatted}
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px]">
+                                    {r.access ? (
+                                      <div className="flex items-center gap-1 text-foreground">
+                                        <span
+                                          title={
+                                            r.access.detail ?? r.access.address
+                                          }
+                                        >
+                                          {r.access.detail ?? r.access.address} (
+                                          <span className="font-mono tabular-nums">
+                                            {r.access.address}:{r.access.port}
+                                          </span>
+                                          )
+                                        </span>
+                                        {!r.access.isActive ? (
+                                          <Badge
+                                            variant="outline"
+                                            className="text-muted-foreground text-[9px] py-0 px-1"
+                                          >
+                                            Acceso inactivo
+                                          </Badge>
+                                        ) : null}
+                                      </div>
+                                    ) : (
+                                      <span className="text-muted-foreground">
+                                        Sin acceso en el catálogo
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            ))
+                              )
+                            })
                           )}
                         </div>
                       </TableCell>
@@ -645,18 +711,18 @@ export function ProxiesPage() {
                       </TableCell>
 
                       {/* 6. Acciones */}
-                      <TableCell className="whitespace-nowrap text-right align-top">
-                        <div className="flex flex-nowrap items-center justify-end gap-1">
+                      <TableCell className="text-right align-top">
+                        <div className="flex flex-wrap justify-end gap-1">
                           <Button
                             type="button"
                             variant="ghost"
-                            size="icon-xs"
-                            className="text-primary hover:bg-primary/10 hover:text-primary"
+                            size="xs"
                             onClick={() => setSelectedServiceId(service.id)}
                             aria-label={`Ver detalle de ${service.name}`}
                             title="Ver detalle del servicio y logs"
                           >
-                            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                            <Eye className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                            <span>Detalle</span>
                           </Button>
 
                           {canOperate ? (
@@ -682,7 +748,6 @@ export function ProxiesPage() {
                                   type="button"
                                   variant="destructive"
                                   size="xs"
-                                  className="border-danger/40 bg-danger/10 text-danger hover:bg-danger/20 hover:text-danger focus-visible:border-danger/50 focus-visible:ring-danger/30"
                                   disabled={isBusy}
                                   onClick={() =>
                                     setActionTarget({
@@ -703,7 +768,6 @@ export function ProxiesPage() {
                                   type="button"
                                   variant="outline"
                                   size="xs"
-                                  className="border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
                                   disabled={isBusy}
                                   onClick={() =>
                                     setActionTarget({
@@ -736,7 +800,9 @@ export function ProxiesPage() {
           service={detailTarget}
           host={settings.host}
           canOperate={canOperate}
+          canManage={canManage}
           onClose={() => setSelectedServiceId(null)}
+          onSaved={() => setReloadKey((k) => k + 1)}
         />
       ) : null}
 

@@ -4,12 +4,14 @@ import type {
   ProxyListResponse,
   ProxyLogsResponse,
   ProxyPort,
+  ProxyProtocol,
   ProxyRoute,
   ProxyRouteAccess,
   ProxyRuntime,
   ProxyServiceView,
   ProxySettings,
   ProxyStatus,
+  UpdateProxyAllowlistInput,
   UpdateProxySettingsInput,
 } from '@qabase/shared'
 import { apiFetch } from '@/lib/api'
@@ -20,12 +22,14 @@ export type {
   ProxyListResponse,
   ProxyLogsResponse,
   ProxyPort,
+  ProxyProtocol,
   ProxyRoute,
   ProxyRouteAccess,
   ProxyRuntime,
   ProxyServiceView,
   ProxySettings,
   ProxyStatus,
+  UpdateProxyAllowlistInput,
   UpdateProxySettingsInput,
 }
 
@@ -39,6 +43,16 @@ export function updateProxySettings(
   return apiFetch<ProxySettings>('/api/proxies/settings', {
     method: 'PATCH',
     body: JSON.stringify(input),
+  })
+}
+
+export function requestUpdateProxyAllowlist(
+  id: number,
+  cidrs: string[],
+): Promise<ProxyServiceView> {
+  return apiFetch<ProxyServiceView>(`/api/proxies/${id}/allowlist`, {
+    method: 'PATCH',
+    body: JSON.stringify({ cidrs }),
   })
 }
 

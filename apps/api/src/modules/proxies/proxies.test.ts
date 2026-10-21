@@ -1,4 +1,9 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -15,6 +20,7 @@ import {
   restartProxy,
   startProxy,
   stopProxy,
+  updateProxyAllowlist,
   updateProxySettings,
 } from './service'
 import { syncProxyCatalog } from './catalog'
@@ -192,7 +198,7 @@ describe('catálogo de servicios de proxy', () => {
     })
 
     const result = syncProxyCatalog(db, root, now)
-    expect(result).toEqual({ services: 3, routes: 4, ports: 4 })
+    expect(result).toEqual({ services: 4, routes: 5, ports: 5 })
     expect(
       db
         .prepare('SELECT slug, entry FROM proxy_services ORDER BY slug')
@@ -200,6 +206,7 @@ describe('catálogo de servicios de proxy', () => {
     ).toEqual([
       { slug: 'gitlab', entry: 'proxy.cjs' },
       { slug: 'mantis', entry: 'proxy.cjs' },
+      { slug: 'mongodb-qa', entry: 'proxy.cjs' },
       { slug: 'sentinel', entry: 'server.cjs' },
     ])
 
@@ -211,6 +218,7 @@ describe('catálogo de servicios de proxy', () => {
     expect(response.services.map((service) => service.slug)).toEqual([
       'gitlab',
       'mantis',
+      'mongodb-qa',
       'sentinel',
     ])
     const gitlab = response.services.find((service) => service.slug === 'gitlab')
@@ -234,6 +242,15 @@ describe('catálogo de servicios de proxy', () => {
     expect(sentinel?.routes[1]?.access).toBeNull()
     const mantis = response.services.find((service) => service.slug === 'mantis')
     expect(mantis?.ports.map((port) => port.port)).toEqual([80, 8080])
+    const mongo = response.services.find(
+      (service) => service.slug === 'mongodb-qa',
+    )
+    expect(mongo).toMatchObject({
+      protocol: 'tcp',
+      ports: [{ port: 27017, isPrimary: true }],
+      routes: [{ target: 'tcp://10.5.83.84:27017' }],
+      allowlist: [],
+    })
   })
 
   it('rechaza puertos duplicados, entries inseguros y manifiestos inválidos', async () => {
@@ -296,6 +313,7 @@ describe('estado de servicios', () => {
         nodeListener(8081, 'gitlab', 'proxy.cjs'),
         nodeListener(80, 'mantis', 'proxy.cjs'),
         nodeListener(8080, 'mantis', 'proxy.cjs'),
+        nodeListener(27017, 'mongodb-qa', 'proxy.cjs'),
         nodeListener(3500, 'sentinel', 'server.cjs'),
       ]),
       healthCheck: async () => true,
@@ -361,6 +379,121 @@ describe('estado de servicios', () => {
       host: '10.4.24.18',
       port: 3500,
       path: '/bridge-health',
+    })
+  })
+
+  it('normaliza y guarda la allowlist TCP, la escribe para el proxy y la audita', async () => {
+    const db = await setup()
+    const base = mkdtempSync(join(tmpdir(), 'qabase-allowlist-'))
+    const logs = join(base, 'logs')
+    mkdirSync(logs)
+    syncProxyCatalog(db, root, now)
+    const mongo = (
+      await listProxies(db, { inspector: inspectorWith([]), now })
+    ).services.find((service) => service.slug === 'mongodb-qa')!
+
+    const updated = await updateProxyAllowlist(
+      db,
+      actor,
+      mongo.id,
+      ['10.4.24.18', '10.4.24.0/24', '10.4.24.18'],
+      { logsPath: logs, inspector: inspectorWith([]), now },
+    )
+    expect(updated.allowlist).toEqual([
+      '10.4.24.0/24',
+      '10.4.24.18/32',
+    ])
+    const file = join(base, 'proxies', 'mongodb-qa.allowlist.json')
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({
+      cidrs: ['10.4.24.18/32', '10.4.24.0/24'],
+    })
+    const auditRow = db
+      .prepare(
+        "SELECT action, after_json FROM audit_events WHERE action = 'proxy.allowlist_updated'",
+      )
+      .get() as { action: string; after_json: string }
+    expect(JSON.parse(auditRow.after_json)).toEqual({
+      allowlist: ['10.4.24.18/32', '10.4.24.0/24'],
+    })
+
+    for (const invalid of [
+      '::1',
+      'mongo.local',
+      '10.4.24.300',
+      '10.4.24.0/33',
+    ]) {
+      await expect(
+        updateProxyAllowlist(db, actor, mongo.id, [invalid], {
+          logsPath: logs,
+          inspector: inspectorWith([]),
+          now,
+        }),
+      ).rejects.toThrow(/no es válido|prefijo/i)
+    }
+
+    const gitlab = (
+      await listProxies(db, { inspector: inspectorWith([]), now })
+    ).services.find((service) => service.slug === 'gitlab')!
+    await expect(
+      updateProxyAllowlist(db, actor, gitlab.id, ['10.4.24.18'], {
+        logsPath: logs,
+        inspector: inspectorWith([]),
+        now,
+      }),
+    ).rejects.toThrow(/solo aplica a servicios TCP/i)
+
+    const cleared = await updateProxyAllowlist(db, actor, mongo.id, [], {
+      logsPath: logs,
+      inspector: inspectorWith([]),
+      now,
+    })
+    expect(cleared.allowlist).toEqual([])
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ cidrs: [] })
+  })
+
+  it('inicia un TCP con el archivo de allowlist', async () => {
+    const db = await setup()
+    const base = mkdtempSync(join(tmpdir(), 'qabase-tcp-start-'))
+    const logs = join(base, 'logs')
+    mkdirSync(logs)
+    const dir = manifestsDir({
+      tcpdemo: {
+        ...baseManifest,
+        name: 'TCP Demo',
+        protocol: 'tcp',
+        ports: [9300],
+        primaryPort: 9300,
+        routes: [{ path: '/', target: 'tcp://10.0.0.1:27017' }],
+      },
+    })
+    syncProxyCatalog(db, dir, now)
+    const service = (
+      await listProxies(db, { inspector: inspectorWith([]), now })
+    ).services[0]!
+    const controller = fakeController()
+    const updated = await updateProxyAllowlist(
+      db,
+      actor,
+      service.id,
+      ['10.4.24.18'],
+      { logsPath: logs, inspector: inspectorWith([]), now },
+    )
+    expect(updated.allowlist).toEqual(['10.4.24.18/32'])
+
+    await startProxy(db, actor, service.id, {
+      proxiesPath: dir,
+      logsPath: logs,
+      inspector: inspectorWith([]),
+      controller,
+      healthCheck: async () => true,
+      now,
+    })
+    const allowlistFile = controller.started[0]!.allowlistFile
+    expect(allowlistFile).toBe(
+      join(base, 'proxies', 'tcpdemo.allowlist.json'),
+    )
+    expect(JSON.parse(readFileSync(allowlistFile!, 'utf8'))).toEqual({
+      cidrs: ['10.4.24.18/32'],
     })
   })
 

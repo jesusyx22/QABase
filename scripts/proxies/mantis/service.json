@@ -1,6 +1,7 @@
 {
   "name": "Mantis BT",
   "environment": "qa",
+  "protocol": "http",
   "entry": "proxy.cjs",
   "ports": [80, 8080],
   "primaryPort": 80,

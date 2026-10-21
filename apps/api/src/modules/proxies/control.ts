@@ -9,6 +9,8 @@ import {
   readSync,
   renameSync,
   statSync,
+  unlinkSync,
+  writeFileSync,
 } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
@@ -23,6 +25,7 @@ export type StartProcessInput = {
   primaryPort: number
   logFile: string
   host: string
+  allowlistFile?: string
 }
 
 export interface ProxyProcessController {
@@ -50,6 +53,29 @@ function rotateLog(logFile: string): void {
 
 export function logPathFor(logsPath: string, slug: string): string {
   return join(logsPath, `${slug}.log`)
+}
+
+export function allowlistPathFor(logsPath: string, slug: string): string {
+  return join(dirname(logsPath), 'proxies', `${slug}.allowlist.json`)
+}
+
+export function writeAllowlistFile(
+  file: string,
+  cidrs: readonly string[],
+): void {
+  mkdirSync(dirname(file), { recursive: true })
+  const temporary = `${file}.${process.pid}.${Date.now()}.tmp`
+  writeFileSync(temporary, JSON.stringify({ cidrs }), 'utf8')
+  try {
+    renameSync(temporary, file)
+  } catch (error) {
+    try {
+      unlinkSync(temporary)
+    } catch {
+      // El temporal pudo haberse movido o no existir.
+    }
+    throw error
+  }
 }
 
 export function readLogTail(logFile: string, lines: number): string[] {
@@ -106,6 +132,9 @@ export function createSystemProcessController(): ProxyProcessController {
               ...process.env,
               PORT: String(input.primaryPort),
               BIND_HOST: input.host,
+              ...(input.allowlistFile
+                ? { ALLOWLIST_FILE: input.allowlistFile }
+                : {}),
             },
           },
         )

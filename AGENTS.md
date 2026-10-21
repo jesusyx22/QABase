@@ -137,3 +137,4 @@ Solo lectura. QABase **no** llama a la web institucional: el VPS no la alcanza. 
 - Los proxies de `scripts/proxies/**` usan `.cjs`: el `package.json` raíz declara `"type": "module"` y un `.js` con `require` falla como ESM.
 - `proxy_settings.host` es la interfaz de enlace: QABase la pasa como `BIND_HOST`; cambiarla exige reiniciar los servicios.
 - La inspección de puertos usa `netstat -ano`; no vuelvas a `Get-NetTCPConnection`/`Get-CimInstance` en el camino caliente: añaden ~3 s por carga.
+- Los proxies TCP usan allowlist por servicio en `proxy_allowlist`; vacía deniega todo. QABase la escribe en `data/proxies/<slug>.allowlist.json` y el proxy la lee por conexión; nunca guardes credenciales.
