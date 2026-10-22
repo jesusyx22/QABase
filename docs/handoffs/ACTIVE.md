@@ -1,15 +1,16 @@
 # Handoff activo — QABase
 
-Actualizado: 2026-10-22 14:34 UTC
+Actualizado: 2026-10-22 14:35 UTC
 
 ## Objetivo
 
-Publicar MongoDB QA por TCP y añadir allowlist por servicio, sin guardar
-credenciales en QABase.
+Publicar MongoDB y DocumentDB por TCP, con allowlist identificada por
+responsable, sin guardar credenciales en QABase.
 
 ## Estado
 
-- Rama **`main`**; los cambios de `feat/proxies-tcp` están integrados.
+- Rama **`main`**; los cambios de `feat/proxies-tcp` están integrados por
+  fast-forward. Último commit de código: `3df1e9b`.
 - `npm run verify` en verde en Windows: 45 archivos, **350 tests**, typecheck,
   lint y build.
 - Migraciones `011-proxies-tcp` y `012-allowlist-labels` aplicadas:
@@ -50,12 +51,18 @@ credenciales en QABase.
 - Protocolo `tcp` en manifiestos, contratos y modelo de servicios.
 - Migración `011` y tabla `proxy_allowlist`.
 - Validación/normalización de IPv4 y CIDR; máximo 100 entradas.
-- API `PATCH /api/proxies/:id/allowlist` con auditoría
-  `proxy.allowlist_updated`.
+- API `PATCH /api/proxies/:id/allowlist` con `{ cidr, label }`, auditoría
+  `proxy.allowlist_updated` y rechazo de CIDR duplicados o nombre vacío.
+- Migración `012` con `label`; entradas existentes migradas como `Admin`.
 - Proxy TCP `scripts/proxies/mongodb-qa/proxy.cjs` con allowlist y logs.
-- QABase escribe la allowlist antes de arrancar y al editarla.
-- UI: distintivo TCP/HTTP, allowlist en el detalle, editor y aviso de lista vacía.
+- Proxy TCP `scripts/proxies/documentdb-qa/proxy.cjs` con TLS de extremo a
+  extremo y allowlist.
+- QABase escribe la allowlist antes de arrancar y al editarla; al proxy solo
+  llegan los CIDR.
+- UI: distintivo TCP/HTTP, allowlist por filas `IP/CIDR + Nombre`, numeración
+  de filas visibles, Detener/Reiniciar con igual ancho y colores semánticos.
 - Pruebas de API, rutas, UI y smoke real de TLS/allowlist.
+- Integración en `main`; gate completo en verde.
 - Revisión de Codex aplicada: la allowlist se escribe con temporal + rename
   atómico para no truncar el archivo mientras el proxy lo lee.
 
@@ -63,8 +70,10 @@ credenciales en QABase.
 
 - Probar MongoDB y DocumentDB con Compass desde `10.4.24.18` usando un usuario
   de solo lectura.
-- Ampliar la allowlist desde la UI con las IPs reales del equipo QA y asignar
-  a cada una el nombre del responsable (por ejemplo `David`).
+- Asignar el nombre del responsable a cada IP; `10.4.24.24` quedó como `Admin`
+  y puede renombrarse, por ejemplo, a `David`.
+- Ampliar la allowlist desde la UI con las IPs reales del equipo QA.
+- Rotar las credenciales de administrador que se compartieron fuera del repo.
 - DocumentDB: usar `tls=true`, `tlsCAFile=global-bundle.pem`,
   `tlsAllowInvalidHostnames=true`, `directConnection=true` y `retryWrites=false`.
 - No volver a arrancar el antiguo `runner.js` de Mantis mientras QABase gestione
@@ -78,6 +87,7 @@ credenciales en QABase.
 - `apps/api/src/modules/proxies/{catalog,repository,service,validation,control}.ts`
 - `apps/api/src/routes/proxies.ts`
 - `apps/web/src/features/proxies/`
+- `apps/web/src/features/proxies/ProxyAllowlistDialog.tsx`
 - `apps/web/src/pages/ProxiesPage.tsx`
 - `scripts/proxies/mongodb-qa/{service.json,proxy.cjs}`
 - `scripts/proxies/documentdb-qa/{service.json,proxy.cjs}`
