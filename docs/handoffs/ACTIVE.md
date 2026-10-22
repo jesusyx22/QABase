@@ -1,6 +1,6 @@
 # Handoff activo — QABase
 
-Actualizado: 2026-10-21 00:16 UTC
+Actualizado: 2026-10-22 14:34 UTC
 
 ## Objetivo
 
@@ -9,7 +9,7 @@ credenciales en QABase.
 
 ## Estado
 
-- Rama **`feat/proxies-tcp`**, publicada en `origin`.
+- Rama **`main`**; los cambios de `feat/proxies-tcp` están integrados.
 - `npm run verify` en verde en Windows: 45 archivos, **350 tests**, typecheck,
   lint y build.
 - Migraciones `011-proxies-tcp` y `012-allowlist-labels` aplicadas:
@@ -108,8 +108,8 @@ ECONNRESET (allowlist vacía)
 
 ## Siguiente paso
 
-Revisar el diff, hacer commit/push de `feat/proxies-tcp` y validar Compass con
-el usuario read-only. Después ampliar la allowlist con las IPs del equipo.
+Validar Compass con el usuario read-only y después ampliar la allowlist con las
+IPs del equipo. Los cambios de proxies TCP ya están en `main`.
 
 ## Skills sugeridas
 
