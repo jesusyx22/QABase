@@ -198,7 +198,7 @@ describe('catálogo de servicios de proxy', () => {
     })
 
     const result = syncProxyCatalog(db, root, now)
-    expect(result).toEqual({ services: 5, routes: 6, ports: 6 })
+    expect(result).toEqual({ services: 6, routes: 7, ports: 7 })
     expect(
       db
         .prepare('SELECT slug, entry FROM proxy_services ORDER BY slug')
@@ -206,6 +206,7 @@ describe('catálogo de servicios de proxy', () => {
     ).toEqual([
       { slug: 'documentdb-qa', entry: 'proxy.cjs' },
       { slug: 'gitlab', entry: 'proxy.cjs' },
+      { slug: 'jaeger-payment2', entry: 'proxy.cjs' },
       { slug: 'mantis', entry: 'proxy.cjs' },
       { slug: 'mongodb-qa', entry: 'proxy.cjs' },
       { slug: 'sentinel', entry: 'server.cjs' },
@@ -219,6 +220,7 @@ describe('catálogo de servicios de proxy', () => {
     expect(response.services.map((service) => service.slug)).toEqual([
       'documentdb-qa',
       'gitlab',
+      'jaeger-payment2',
       'mantis',
       'mongodb-qa',
       'sentinel',
@@ -233,6 +235,23 @@ describe('catálogo de servicios de proxy', () => {
           path: '/',
           target: 'http://10.5.5.201:80',
           access: { address: '10.5.5.201', port: 80 },
+        },
+      ],
+      runtime: { status: 'stopped' },
+    })
+    const jaeger = response.services.find(
+      (service) => service.slug === 'jaeger-payment2',
+    )
+    expect(jaeger).toMatchObject({
+      name: 'JaegerPayment2',
+      environment: 'qa',
+      protocol: 'http',
+      ports: [{ port: 16687, isPrimary: true }],
+      routes: [
+        {
+          path: '/',
+          target: 'http://10.5.83.150:16686',
+          access: null,
         },
       ],
       runtime: { status: 'stopped' },
@@ -313,6 +332,7 @@ describe('estado de servicios', () => {
     const active = await listProxies(db, {
       inspector: inspectorWith([
         nodeListener(8081, 'gitlab', 'proxy.cjs'),
+        nodeListener(16687, 'jaeger-payment2', 'proxy.cjs'),
         nodeListener(80, 'mantis', 'proxy.cjs'),
         nodeListener(8080, 'mantis', 'proxy.cjs'),
         nodeListener(27017, 'mongodb-qa', 'proxy.cjs'),

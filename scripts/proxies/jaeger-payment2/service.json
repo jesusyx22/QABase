@@ -1,0 +1,16 @@
+{
+  "name": "JaegerPayment2",
+  "environment": "qa",
+  "protocol": "http",
+  "entry": "proxy.cjs",
+  "ports": [16687],
+  "primaryPort": 16687,
+  "healthPath": null,
+  "routes": [
+    {
+      "path": "/",
+      "target": "http://10.5.83.150:16686",
+      "detail": "Jaeger Payment 2"
+    }
+  ]
+}

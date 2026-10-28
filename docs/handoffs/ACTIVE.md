@@ -1,16 +1,15 @@
 # Handoff activo — QABase
 
-Actualizado: 2026-10-22 14:35 UTC
+Actualizado: 2026-10-28 15:04 UTC
 
 ## Objetivo
 
-Publicar MongoDB y DocumentDB por TCP, con allowlist identificada por
-responsable, sin guardar credenciales en QABase.
+Publicar JaegerPayment2 por reverse proxy HTTP y conservar los proxies TCP de
+MongoDB y DocumentDB con allowlist identificada por responsable.
 
 ## Estado
 
-- Rama **`main`**; los cambios de `feat/proxies-tcp` están integrados por
-  fast-forward. Último commit de código: `3df1e9b`.
+- Rama **`feat/proxy-jaeger-payment2`**, creada desde `main` (`e7503d5`).
 - `npm run verify` en verde en Windows: 45 archivos, **350 tests**, typecheck,
   lint y build.
 - Migraciones `011-proxies-tcp` y `012-allowlist-labels` aplicadas:
@@ -30,6 +29,12 @@ responsable, sin guardar credenciales en QABase.
   proxies; allowlist vacía devuelve `ECONNRESET`; al restaurar `10.4.24.18`
   vuelve el handshake.
 - GitLab, Mantis y Sentinel siguen activos y enlazados a `10.4.24.18`.
+- Servicio **`jaeger-payment2`** nuevo: reverse proxy HTTP de
+  `http://10.5.83.150:16686` publicado en `10.4.24.18:16687`, sin allowlist.
+  Manifiesto en `scripts/proxies/jaeger-payment2/`. Todavía no está sincronizado
+  en SQLite: falta reiniciar la API y arrancarlo desde la UI.
+- El 16686 local está ocupado por un Jaeger en Docker (Docker Desktop y
+  `wslrelay`); por eso el proxy usa 16687.
 
 ## Decisiones
 
@@ -68,6 +73,8 @@ responsable, sin guardar credenciales en QABase.
 
 ## Pendiente
 
+- Reiniciar la API para que `syncProxyCatalog` cargue `jaeger-payment2` y
+  arrancarlo desde la UI; comprobar `http://10.4.24.18:16687/` desde otra PC.
 - Probar MongoDB y DocumentDB con Compass desde `10.4.24.18` usando un usuario
   de solo lectura.
 - Asignar el nombre del responsable a cada IP; `10.4.24.24` quedó como `Admin`
@@ -91,6 +98,7 @@ responsable, sin guardar credenciales en QABase.
 - `apps/web/src/pages/ProxiesPage.tsx`
 - `scripts/proxies/mongodb-qa/{service.json,proxy.cjs}`
 - `scripts/proxies/documentdb-qa/{service.json,proxy.cjs}`
+- `scripts/proxies/jaeger-payment2/{service.json,proxy.cjs}`
 - `docs/specs/012-proxies-tcp.md`
 - `docs/adr/0014-proxy-tcp.md`
 
@@ -116,10 +124,18 @@ TLS_OK TLSv1.3 (allowlist 10.4.24.18/32)
 ECONNRESET (allowlist vacía)
 ```
 
+Smoke del proxy nuevo, enlazado a loopback y detenido después:
+
+```text
+GET / -> 200 (5975 bytes, text/html)
+GET /api/services -> 200 {"data":["jaeger","payment-management-b"],"total":2}
+```
+
 ## Siguiente paso
 
-Validar Compass con el usuario read-only y después ampliar la allowlist con las
-IPs del equipo. Los cambios de proxies TCP ya están en `main`.
+Reiniciar la API, arrancar `JaegerPayment2` desde Proxies y abrir
+`http://10.4.24.18:16687/` desde otra máquina. Después, validar Compass con el
+usuario read-only y ampliar la allowlist del equipo.
 
 ## Skills sugeridas
 
