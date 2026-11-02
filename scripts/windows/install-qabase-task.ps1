@@ -74,24 +74,31 @@ if (-not $resolvedNode -or -not (Test-Path -LiteralPath $resolvedNode)) {
 $powershellExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" -Port {1} -NodeExe "{2}"' -f $launcher, $Port, $resolvedNode
 $interval = 'PT{0}M' -f [int]$IntervalMinutes
+# El disparador repetido arranca en el momento del registro: asi la vigilancia
+# queda armada de inmediato y no solo despues del siguiente reinicio.
+$startBoundary = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
 
 $xml = @"
 <?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
     <Author>QABase</Author>
-    <Description>Arranca QABase (API + SPA) al iniciar Windows y lo reintenta cada $IntervalMinutes minutos si el puerto $Port deja de responder.</Description>
+    <Description>Arranca QABase (API + SPA) al iniciar Windows y comprueba cada $IntervalMinutes minutos que el puerto $Port siga respondiendo.</Description>
     <URI>\$TaskName</URI>
   </RegistrationInfo>
   <Triggers>
     <BootTrigger>
       <Enabled>true</Enabled>
       <Delay>PT30S</Delay>
+    </BootTrigger>
+    <TimeTrigger>
+      <StartBoundary>$startBoundary</StartBoundary>
+      <Enabled>true</Enabled>
       <Repetition>
         <Interval>$interval</Interval>
         <StopAtDurationEnd>false</StopAtDurationEnd>
       </Repetition>
-    </BootTrigger>
+    </TimeTrigger>
   </Triggers>
   <Principals>
     <Principal id="Author">

@@ -25,14 +25,19 @@ Restricciones reales de la máquina:
 ## Decisión
 
 1. El arranque es una **tarea programada de Windows** llamada `QABase`, que
-   corre como `SYSTEM` (sin sesión abierta) con el disparador *Al iniciar el
-   sistema*, 30 s de retardo y una repetición cada 5 minutos que actúa como
-   vigilante.
+   corre como `SYSTEM` (sin sesión abierta). Tiene dos disparadores: *Al
+   iniciar el sistema* con 30 s de retardo, y una comprobación repetida cada
+   5 minutos que actúa como vigilante (si el proceso se cayó, lo vuelve a
+   levantar).
 2. La tarea ejecuta `scripts/windows/start-qabase.ps1`, un lanzador
    **idempotente**: si el puerto 3000 ya responde, termina con código 0 sin
    lanzar un segundo proceso.
 3. El lanzador arranca `node apps/api/dist/server.js` (un solo proceso sirve
-   la SPA y `/api`), con salida a `data/logs/qabase.log` y rotación a 5 MB.
+   la SPA y `/api`). La salida del proceso va a `data/logs/qabase-app.log` y
+   la traza del lanzador a `data/logs/qabase.log`; ambos rotan a 5 MB. Los
+   archivos están separados porque quien redirige la salida mantiene el
+   archivo abierto y ningún otro proceso puede anexar en él: con un solo
+   archivo, el vigilante no podría dejar constancia de sus pasadas.
 4. El lanzador **no compila**. Si falta el build o es más antiguo que el
    código, lo registra en el log y sale con código 1. Compilar al arrancar
    haría el inicio lento, dependiente de la red y difícil de diagnosticar.

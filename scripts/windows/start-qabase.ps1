@@ -33,6 +33,9 @@ function Resolve-QabaseRoot {
 
 $rootPath = Resolve-QabaseRoot $Root
 $logFile = Join-Path $rootPath 'data\logs\qabase.log'
+# La salida del proceso va a un archivo aparte: quien lo redirige lo mantiene
+# abierto y nadie mas podria anexar la traza del lanzador.
+$appLogFile = Join-Path $rootPath 'data\logs\qabase-app.log'
 $entryPoint = Join-Path $rootPath 'apps\api\dist\server.js'
 $webIndex = Join-Path $rootPath 'apps\web\dist\index.html'
 
@@ -52,14 +55,15 @@ function Write-QabaseLog {
 }
 
 function Invoke-LogRotation {
+  param([string]$File)
   try {
-    if (-not (Test-Path -LiteralPath $logFile)) { return }
-    if ((Get-Item -LiteralPath $logFile).Length -lt 5MB) { return }
-    $previous = '{0}.1' -f $logFile
+    if (-not (Test-Path -LiteralPath $File)) { return }
+    if ((Get-Item -LiteralPath $File).Length -lt 5MB) { return }
+    $previous = '{0}.1' -f $File
     if (Test-Path -LiteralPath $previous) {
       Move-Item -LiteralPath $previous -Destination ('{0}.old' -f $previous) -Force
     }
-    Move-Item -LiteralPath $logFile -Destination $previous -Force
+    Move-Item -LiteralPath $File -Destination $previous -Force
   } catch {
     # Si no se puede rotar se sigue anexando al archivo actual.
   }
@@ -113,8 +117,7 @@ function Get-NewestSource {
     Select-Object -First 1
 }
 
-Invoke-LogRotation
-Write-QabaseLog "Arranque solicitado (raiz=$rootPath puerto=$Port)."
+Invoke-LogRotation -File $logFileWrite-QabaseLog "Arranque solicitado (raiz=$rootPath puerto=$Port)."
 
 if (-not (Test-Path -LiteralPath $entryPoint)) {
   Write-QabaseLog "ERROR falta el build del API: $entryPoint. Ejecuta npm run build."
@@ -167,7 +170,8 @@ if (-not $shell -or -not (Test-Path -LiteralPath $shell)) {
   $shell = Join-Path $env:SystemRoot 'System32\cmd.exe'
 }
 
-$launchCommand = '/c ""{0}" "{1}" >> "{2}" 2>&1"' -f $nodePath, $entryPoint, $logFile
+$launchCommand = '/c ""{0}" "{1}" >> "{2}" 2>&1"' -f $nodePath, $entryPoint, $appLogFile
+Invoke-LogRotation -File $appLogFile
 try {
   $tracked = Start-Process -FilePath $shell -ArgumentList $launchCommand `
     -WorkingDirectory $rootPath -WindowStyle Hidden -PassThru
@@ -186,9 +190,9 @@ while ((Get-Date) -lt $deadline) {
   }
 }
 
-Write-QabaseLog "ERROR QABase no respondio en $TimeoutSeconds s. Ultimas lineas del log:"
+Write-QabaseLog "ERROR QABase no respondio en $TimeoutSeconds s. Ultimas lineas de qabase-app.log:"
 try {
-  Get-Content -LiteralPath $logFile -Tail 20 | ForEach-Object { Write-Output $_ }
+  Get-Content -LiteralPath $appLogFile -Tail 20 | ForEach-Object { Write-Output $_ }
 } catch {
   # Sin log no hay mas contexto que el codigo de salida.
 }

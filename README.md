@@ -49,12 +49,14 @@ npm run service:uninstall
 
 Cómo funciona:
 
-- La tarea `QABase` corre como `SYSTEM` con el disparador *Al iniciar el
-  sistema* (30 s de retardo) y se repite cada 5 minutos como vigilante.
+- La tarea `QABase` corre como `SYSTEM` con dos disparadores: *Al iniciar el
+  sistema* (30 s de retardo) y una comprobación cada 5 minutos que actúa como
+  vigilante.
 - Ejecuta `scripts/windows/start-qabase.ps1`, que es **idempotente**: si el
   puerto 3000 ya responde, no lanza un segundo proceso.
-- El proceso de QABase es `node apps/api/dist/server.js` con
-  `data/logs/qabase.log` como log (rota al pasar 5 MB).
+- El proceso de QABase es `node apps/api/dist/server.js`. Su salida va a
+  `data/logs/qabase-app.log` y la traza del lanzador a `data/logs/qabase.log`
+  (ambos rotan al pasar 5 MB).
 - Si el build no existe, o es más antiguo que el código, el lanzador lo anota
   en el log y falla: no compila solo. Después de cambiar código, `npm run
   build` y reinicia el servicio.

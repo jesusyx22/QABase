@@ -11,10 +11,11 @@ JaegerPayment2 por reverse proxy HTTP.
 
 - Rama **`feat/proxy-jaeger-payment2`**; el árbol de trabajo incluye ahora el
   arranque automático (commit pendiente al cerrar este hito).
-- **Tarea programada `QABase` registrada** (SYSTEM, *Al iniciar el sistema* con
-  30 s de retardo y repetición cada 5 minutos como vigilante). Verificada
-  lanzándola a mano: `LastTaskResult=0`, `node dist/server.js` corriendo como
-  `NT AUTHORITY\SYSTEM` y `GET /api/health` → 200.
+- **Tarea programada `QABase` registrada** (SYSTEM, disparador *Al iniciar el
+  sistema* con 30 s de retardo + comprobación repetida cada 5 minutos).
+  Verificada: `LastTaskResult=0`, `node dist/server.js` corriendo como
+  `NT AUTHORITY\SYSTEM`, `GET /api/health` → 200 y el vigilante dejando su
+  pasada en el log sin lanzar una segunda instancia.
 - `npm run verify` en verde tras el cambio (sin tocar código de la app).
 - Los proxies están **detenidos**: tras el reinicio nadie los arrancó, así que
   GitLab, Mantis, Sentinel, MongoDB, DocumentDB y Jaeger no escuchan en
@@ -40,6 +41,9 @@ JaegerPayment2 por reverse proxy HTTP.
 - `scripts/windows/install-qabase-task.ps1` y `uninstall-qabase-task.ps1`:
   registro y baja de la tarea, con guardia de elevación y verificación
   posterior.
+- Logs separados: `data/logs/qabase.log` (lanzador y vigilante) y
+  `data/logs/qabase-app.log` (salida del proceso). Con un solo archivo el
+  vigilante no podía escribir: quien redirige la salida lo mantiene abierto.
 - Scripts npm `service:install`, `service:uninstall` y `service:start`.
 - README con la sección de arranque automático y el ADR 0015.
 
@@ -62,7 +66,7 @@ JaegerPayment2 por reverse proxy HTTP.
 - `scripts/windows/uninstall-qabase-task.ps1`
 - `docs/adr/0015-arranque-automatico-windows.md`
 - `package.json` (scripts `service:*`)
-- `data/logs/qabase.log` (log del servicio, ignorado por Git)
+- `data/logs/qabase.log` y `data/logs/qabase-app.log` (ignorados por Git)
 
 ## Verificación
 
@@ -72,10 +76,14 @@ powershell -File scripts\windows\start-qabase.ps1
 2026-11-02 14:57:40 OK QABase escuchando en http://127.0.0.1:3000 (pid 30384).
 
 Start-ScheduledTask -TaskName 'QABase'   # desde consola elevada
-Task LastRunTime=02/11/2026 10:03:48 LastTaskResult=0
-Proceso 23876 ejecuta como NT AUTHORITY\SYSTEM ::
+Task LastRunTime=02/11/2026 10:18:00 LastTaskResult=0 NextRunTime=02/11/2026 10:20:11
+Proceso 20368 ejecuta como NT AUTHORITY\SYSTEM ::
   "C:\Program Files\nodejs\node.exe" "D:\Deploy\QABase\apps\api\dist\server.js"
 GET /api/health -> 200 {"status":"ok"}
+
+# Pasada del vigilante (disparador de 5 minutos), sin duplicar el proceso
+2026-11-02 15:20:13 OK QABase ya respondia en http://127.0.0.1:3000/api/health;
+                    no se inicia otro proceso.
 ```
 
 ## Siguiente paso
