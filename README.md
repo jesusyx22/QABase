@@ -30,6 +30,38 @@ npm run build     # API (tsup) + SPA (Vite)
 npm start         # un solo proceso sirve la SPA y /api
 ```
 
+## Arranque automático en Windows
+
+QABase queda registrado como **tarea programada** que arranca al iniciar
+Windows, sin sesión abierta, y sirve la SPA y `/api` en
+`http://127.0.0.1:3000`.
+
+```powershell
+# Una sola vez, desde PowerShell elevado (administrador)
+npm run service:install
+
+# Arrancarlo ya, sin esperar un reinicio
+Start-ScheduledTask -TaskName 'QABase'
+
+# Quitarlo
+npm run service:uninstall
+```
+
+Cómo funciona:
+
+- La tarea `QABase` corre como `SYSTEM` con el disparador *Al iniciar el
+  sistema* (30 s de retardo) y se repite cada 5 minutos como vigilante.
+- Ejecuta `scripts/windows/start-qabase.ps1`, que es **idempotente**: si el
+  puerto 3000 ya responde, no lanza un segundo proceso.
+- El proceso de QABase es `node apps/api/dist/server.js` con
+  `data/logs/qabase.log` como log (rota al pasar 5 MB).
+- Si el build no existe, o es más antiguo que el código, el lanzador lo anota
+  en el log y falla: no compila solo. Después de cambiar código, `npm run
+  build` y reinicia el servicio.
+
+Detalle y justificación en `docs/adr/0015-arranque-automatico-windows.md`. Los
+proxies no se arrancan solos: se siguen iniciando desde la pantalla **Proxies**.
+
 ## Módulos
 
 | Módulo | Qué hace |
@@ -85,6 +117,9 @@ python scripts/helpdesk-agent/helpdesk_agent.py --sync
 | `npm run lint` | ESLint sobre todo el repo. |
 | `npm run build` | Bundle del API y build de la SPA. |
 | `npm run db:migrate` | Aplica migraciones pendientes. |
+| `npm run service:install` | Registra la tarea programada de Windows (requiere elevación). |
+| `npm run service:uninstall` | Quita la tarea programada. |
+| `npm run service:start` | Arranca o comprueba QABase con el lanzador. |
 | `npm run verify` | Gate único: typecheck + lint + test + build. |
 
 ## Estructura
@@ -96,7 +131,7 @@ packages/shared   contratos, permisos, validaciones y códigos de error
 docs/adr          decisiones duraderas
 docs/specs        especificaciones por módulo
 docs/handoffs     relevos entre sesiones
-scripts           agente local de Mesa de Ayuda
+scripts           agente local de Mesa de Ayuda y lanzador de Windows
 migrations        SQL versionado, solo hacia adelante
 ```
 

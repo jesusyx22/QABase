@@ -21,6 +21,9 @@
     "db:migrate": "npm run db:migrate -w @qabase/api",
     "import:firewall": "tsx scripts/import-firewall-destinations.ts",
     "verify": "npm run typecheck && npm run lint && npm test && npm run build",
+    "service:install": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/install-qabase-task.ps1",
+    "service:uninstall": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/uninstall-qabase-task.ps1",
+    "service:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/start-qabase.ps1",
     "setup": "npm run setup -w @qabase/api",
     "reset-admin-password": "npm run reset-admin-password -w @qabase/api"
   },
