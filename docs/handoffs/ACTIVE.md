@@ -28,6 +28,13 @@ JaegerPayment2 por reverse proxy HTTP.
   Para escrituras habría que reapuntar el proxy al primario `10.5.83.85`.
 - Allowlist de `mongodb-qa`: `10.4.24.18` (Admin), `172.16.78.93` (Percy2) y
   `192.168.1.16` (Percy). El proxy la aplica en vivo, sin reiniciar.
+- Causa final del fallo de conexión: era la **contraseña**, no la red. `jmaron`
+  existe en `admin` (SCRAM-SHA-256 y SCRAM-SHA-1); con la contraseña vigente y
+  `directConnection=true` la sesión entra. El `ETIMEDOUT 10.5.83.84` era el
+  descubrimiento del replica set, ya resuelto con ese parámetro.
+- Para saber qué entrada autorizó una conexión: el log
+  `data/logs/mongodb-qa.log` registra `ALLOW <ip>` y esa IP se cruza con la
+  allowlist del servicio.
 
 ## Decisiones
 
