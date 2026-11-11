@@ -1,6 +1,6 @@
 # Handoff activo — QABase
 
-Actualizado: 2026-11-02 15:10 UTC
+Actualizado: 2026-11-11 20:48 UTC
 
 ## Objetivo
 
@@ -17,11 +17,17 @@ JaegerPayment2 por reverse proxy HTTP.
   `NT AUTHORITY\SYSTEM`, `GET /api/health` → 200 y el vigilante dejando su
   pasada en el log sin lanzar una segunda instancia.
 - `npm run verify` en verde tras el cambio (sin tocar código de la app).
-- Los proxies están **detenidos**: tras el reinicio nadie los arrancó, así que
-  GitLab, Mantis, Sentinel, MongoDB, DocumentDB y Jaeger no escuchan en
-  `10.4.24.18`.
-- Jaeger, además, apunta a `10.5.83.150:16686`, que responde `ECONNREFUSED`
-  desde esta PC.
+- Proxies escuchando en `10.4.24.18`: GitLab `8081`, Sentinel `3500`,
+  MongoDB `27017`, DocumentDB `27018` y Jaeger `16687`. Mantis (`80`, `8080`)
+  sigue detenido.
+- MongoDB QA es el replica set **`losandesRSCert`**:
+  `testqa-mongodb01/02/03.losandes.pe` = `10.5.83.84/.85/.86`; el primario es
+  `mongodb02`. El proxy publica solo `10.5.83.84`, que es `mongodb01`
+  (secundario). Un cliente con descubrimiento de replica set intenta ir directo
+  a `10.5.83.x` y falla con `ETIMEDOUT`: hay que usar `directConnection=true`.
+  Para escrituras habría que reapuntar el proxy al primario `10.5.83.85`.
+- Allowlist de `mongodb-qa`: `10.4.24.18` (Admin), `172.16.78.93` (Percy2) y
+  `192.168.1.16` (Percy). El proxy la aplica en vivo, sin reiniciar.
 
 ## Decisiones
 
